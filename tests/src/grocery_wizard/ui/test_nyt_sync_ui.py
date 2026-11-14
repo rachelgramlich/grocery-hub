@@ -4,13 +4,20 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from ui_source import APP_PATH, apptest_page_picker
+from ui_source import (
+    APP_PATH,
+    add_recipe_page_source,
+    apptest_page_picker,
+    nyt_sync_ui_source,
+)
+
+from tests.repo_paths import SRC_PACKAGE_ROOT
 
 
 def test_nyt_sync_controls_only_on_add_recipe_tab() -> None:
     app = APP_PATH.read_text(encoding="utf-8")
     assert "render_nyt_sync_controls" not in app
-    add_recipe = (APP_PATH.parent / "views" / "add_recipe.py").read_text(encoding="utf-8")
+    add_recipe = add_recipe_page_source()
     assert "render_nyt_sync_controls()" in add_recipe
 
 
@@ -35,18 +42,16 @@ def test_nyt_sync_visible_on_add_recipe_when_credentials_missing() -> None:
 
 
 def test_list_recipe_box_folders_omits_all_saved_recipes_option() -> None:
-    nyt_sync = (APP_PATH.parent / "nyt_sync.py").read_text(encoding="utf-8")
-    nyt_cooking = (APP_PATH.parent.parent / "integrations" / "nyt_cooking.py").read_text(
-        encoding="utf-8"
-    )
-    assert 'label="All saved recipes"' not in nyt_sync
-    assert "All saved recipes" not in nyt_cooking
+    nyt_sync = nyt_sync_ui_source()
+    nyt_cooking = (SRC_PACKAGE_ROOT / "integrations" / "nyt_cooking.py").read_text(encoding="utf-8")
+    assert "All saved recipes" not in nyt_sync
     assert '_PREFERRED_NYT_FOLDER_LABELS = ("To make", "Favorites")' in nyt_cooking
+    assert 'label="All saved recipes"' not in nyt_cooking
     assert "Recipe box organization" in nyt_sync
 
 
 def test_nyt_sync_shows_progress_bar_during_run() -> None:
-    nyt_sync = (APP_PATH.parent / "nyt_sync.py").read_text(encoding="utf-8")
+    nyt_sync = nyt_sync_ui_source()
     assert 'key="nyt_sync_progress"' in nyt_sync  # container hook for AppTest
     assert "st.progress" in nyt_sync
     assert "expected_recipe_count=folder.recipe_count" in nyt_sync
@@ -61,7 +66,7 @@ def test_nyt_orphan_filing_controls_present() -> None:
 
 
 def test_nyt_dry_run_defaults_off_and_clarifies_notion_outcome() -> None:
-    nyt_sync = (APP_PATH.parent / "nyt_sync.py").read_text(encoding="utf-8")
+    nyt_sync = nyt_sync_ui_source()
     assert 'key="nyt_sync_dry_run"' in nyt_sync
     assert "value=False" in nyt_sync
     assert "Dry run finished — Notion was not updated." in nyt_sync
