@@ -8,6 +8,12 @@ import re
 from collections.abc import Iterable
 
 from src.grocery_wizard.integrations.notion import NotionFieldValues
+from src.grocery_wizard.recipes.recipe_meal_plan_stats import is_meal_plan_tracking_column
+from src.grocery_wizard.recipes.recipe_schema_columns import (
+    classification_rules_key,
+    dinner_lunch_category_na_option,
+    is_dinner_lunch_category_column,
+)
 from src.grocery_wizard.recipes.weeknight import is_weeknight_friendly
 
 # Column name (lowercase) -> option -> keywords
@@ -197,8 +203,6 @@ def classify_column(
     ingredients: Iterable[str],
     allowed_options: list[str] | None = None,
 ) -> str | None:
-    from src.grocery_wizard.recipes.recipe_schema_columns import classification_rules_key
-
     text = _normalize_text(title, ingredients)
     rules = CLASSIFICATION_RULES.get(classification_rules_key(column_name), {})
 
@@ -238,9 +242,6 @@ def classify_recipe(
     results: NotionFieldValues = {}
     meal_options: list[str] | None = None
 
-    from src.grocery_wizard.recipes.recipe_meal_plan_stats import is_meal_plan_tracking_column
-    from src.grocery_wizard.recipes.recipe_schema_columns import is_dinner_lunch_category_column
-
     for column_name, column_type, options in filter_columns:
         if is_meal_plan_tracking_column(column_name):
             continue
@@ -265,8 +266,6 @@ def classify_recipe(
     else:
         meal_value = None
     if meal_value in MEALS_WITHOUT_DINNER_CATEGORY:
-        from src.grocery_wizard.recipes.recipe_schema_columns import dinner_lunch_category_na_option
-
         for column_name, _column_type, options in filter_columns:
             if not is_dinner_lunch_category_column(column_name):
                 continue
