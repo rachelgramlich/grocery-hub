@@ -44,14 +44,31 @@ from collections.abc import Callable, Iterator
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from html import unescape
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import requests
 
 from src.grocery_wizard.config import NYT_LAST_SYNC_PATH
 from src.grocery_wizard.integrations.notion import DEFAULT_NYT_SYNCED_COLUMN
+from src.grocery_wizard.integrations.nyt_recipe_bridge import (
+    add_prefetched_recipes,
+    classify_recipe,
+    default_weeknight_column,
+    filter_columns_for_recipe_classify,
+    is_weeknight_friendly,
+    scrape_error_type,
+    scrape_recipe_from_url,
+)
+from src.grocery_wizard.recipes.classify import MEALS_WITHOUT_DINNER_CATEGORY
+from src.grocery_wizard.recipes.recipe_maintenance import (
+    format_recipe_progress_line,
+    is_blank_metadata_value,
+    normalize_meal_values,
+)
 from src.grocery_wizard.recipes.scraper import REQUEST_TIMEOUT, USER_AGENT
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 SITE = "https://cooking.nytimes.com"
 API_HEADERS = {"x-cooking-api": "cooking-frontend", "accept": "*/*"}
@@ -151,7 +168,7 @@ def verify_nyt_credentials(client: NYTCookingClient | None = None) -> None:
     if load_credentials() is None:
         raise NytAuthError(
             "NYT Cooking credentials are not configured. Set NYT_S_COOKIE and "
-            "NYT_REGI_ID (or NYT_USER_ID) in your environment."
+            "NYT_REGI_ID (or NYT_USER_ID) in your environment.",
         )
     (client or NYTCookingClient()).verify_auth()
 
@@ -247,7 +264,7 @@ class NYTCookingClient:
         if self._credentials is None:
             raise NytAuthError(
                 "NYT Cooking credentials are not configured. Set NYT_S_COOKIE and "
-                "NYT_REGI_ID (or NYT_USER_ID) in your environment."
+                "NYT_REGI_ID (or NYT_USER_ID) in your environment.",
             )
         return self._credentials
 
@@ -260,7 +277,7 @@ class NYTCookingClient:
 
         if response.status_code in (401, 403):
             raise NytAuthError(
-                "NYT Cooking rejected the request — cookie missing, invalid, or expired."
+                "NYT Cooking rejected the request — cookie missing, invalid, or expired.",
             )
         if response.status_code == 404:
             raise NytNotFoundError(f"Nothing found at {url}.")
@@ -326,7 +343,7 @@ class NYTCookingClient:
                     id=str(item.get("id", "")),
                     name=str(item.get("name", "")),
                     recipe_count=int(item.get("collectables_count") or 0),
-                )
+                ),
             )
         return results
 
@@ -821,9 +838,6 @@ def _process_saved_recipe_in_sync(
     on_progress: NytSyncProgressCallback | None,
     recipe_total: int | None,
 ) -> None:
-    # Lazy import: add_recipe pulls NYT helpers; keep sync entry import-light.
-    from src.grocery_wizard.recipes.add_recipe import add_prefetched_recipes
-
     summary.total += 1
     processed = summary.total
     url = saved.url
@@ -881,7 +895,7 @@ def _process_saved_recipe_in_sync(
                 metadata=metadata,
                 flags=flags,
                 ingredient_count=ingredient_count,
-            )
+            ),
         )
         if ingredient_count:
             would_add_message = f"Would add: {saved.name} ({ingredient_count} ingredients)"
@@ -1109,15 +1123,9 @@ def _metadata_for_recipe(
     total_minutes: float | None = None,
     ingredients: list[str] | None = None,
 ) -> dict[str, Any]:
-    # Lazy import: recipe classify stack is heavy; used on sync/reclassify paths only.
-    from src.grocery_wizard.recipes.classify import classify_recipe
-    from src.grocery_wizard.recipes.recipe_meal_plan_stats import filter_columns_for_recipe_classify
-    from src.grocery_wizard.recipes.weeknight import DEFAULT_WEEKNIGHT_COLUMN
-
     filter_columns = filter_columns_for_recipe_classify(db.schema.filter_columns)
-    weeknight_column = (
-        DEFAULT_WEEKNIGHT_COLUMN if DEFAULT_WEEKNIGHT_COLUMN in db.schema.all_columns else None
-    )
+    weeknight_col = default_weeknight_column()
+    weeknight_column = weeknight_col if weeknight_col in db.schema.all_columns else None
     inferred = classify_recipe(
         title,
         ingredients or [],
@@ -1249,7 +1257,7 @@ def _require_nyt_synced_column(db: Any) -> str:
     nyt_column = db.nyt_synced_column_name()
     if not nyt_column:
         raise NYTCookingError(
-            f"NYT synced checkbox column not found. Add '{DEFAULT_NYT_SYNCED_COLUMN}' to Notion."
+            f"NYT synced checkbox column not found. Add '{DEFAULT_NYT_SYNCED_COLUMN}' to Notion.",
         )
     return nyt_column
 
@@ -1273,10 +1281,7 @@ def _dinner_category_column_name(schema: Any) -> str:
 
 
 def _weeknight_column_for_reclassify(db: Any) -> str:
-    # Lazy import: weeknight defaults live in recipes package (avoid import at module load).
-    from src.grocery_wizard.recipes.weeknight import DEFAULT_WEEKNIGHT_COLUMN
-
-    weeknight_column = DEFAULT_WEEKNIGHT_COLUMN
+    weeknight_column = default_weeknight_column()
     if weeknight_column not in db.schema.all_columns:
         return ""
     return weeknight_column
@@ -1296,8 +1301,6 @@ def _fetch_reclassify_nyt_recipe(
         return client.get_recipe(recipe_id)
     except NYTCookingError:
         summary.api_failures += 1
-        from src.grocery_wizard.recipes.recipe_maintenance import format_recipe_progress_line
-
         _notify_sync_progress(
             on_progress,
             format_recipe_progress_line("Could not fetch NYT timing for: ", recipe),
@@ -1318,14 +1321,6 @@ def _build_reclassify_field_updates(
     dinner_category_column: str,
     summary: NytReclassifySummary,
 ) -> dict[str, Any]:
-    # Lazy import: weeknight helper used only during NYT reclassify updates.
-    from src.grocery_wizard.recipes.classify import MEALS_WITHOUT_DINNER_CATEGORY
-    from src.grocery_wizard.recipes.recipe_maintenance import (
-        is_blank_metadata_value,
-        normalize_meal_values,
-    )
-    from src.grocery_wizard.recipes.weeknight import is_weeknight_friendly
-
     title = recipe.name
     fields: dict[str, Any] = {}
 
@@ -1339,7 +1334,7 @@ def _build_reclassify_field_updates(
                 field="Meal",
                 old_value=old_meal,
                 new_value=new_meal,
-            )
+            ),
         )
 
     effective_meal = fields.get("Meal", old_meal)
@@ -1367,7 +1362,7 @@ def _build_reclassify_field_updates(
                     field=weeknight_column,
                     old_value=old_weeknight,
                     new_value=new_weeknight,
-                )
+                ),
             )
 
     effective_meal = fields.get("Meal", old_meal)
@@ -1433,10 +1428,6 @@ def reclassify_nyt_synced_recipes(
     on_progress: NytSyncProgressCallback | None = None,
 ) -> NytReclassifySummary:
     """Re-run Meal and Weeknight Friendly for NYT-synced recipes in Notion."""
-    # Lazy import: classify stack (see ``_metadata_for_recipe``).
-    from src.grocery_wizard.recipes.classify import classify_recipe
-    from src.grocery_wizard.recipes.recipe_meal_plan_stats import filter_columns_for_recipe_classify
-
     nyt_column = _require_nyt_synced_column(db)
     weeknight_column = _weeknight_column_for_reclassify(db)
     filter_columns = filter_columns_for_recipe_classify(db.schema.filter_columns)
@@ -1645,12 +1636,10 @@ def _fetch_nyt_recipe_for_sync(
             pass
 
     if not ingredients and url.strip():
-        # Lazy import: scraper pulls ingredient pipeline; fallback when NYT API omits list.
-        from src.grocery_wizard.recipes.scraper import ScrapeError, scrape_recipe
-
+        scrape_exc = scrape_error_type()
         try:
-            scraped = scrape_recipe(url)
-        except ScrapeError:
+            scraped = scrape_recipe_from_url(url)
+        except scrape_exc:
             pass
         else:
             ingredients = list(scraped.ingredients)

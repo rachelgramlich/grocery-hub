@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from src.grocery_wizard.ingredients.parsed import is_nyt_cooking_url
 from src.grocery_wizard.ingredients.sync import prepare_ingredients_for_notion
@@ -41,6 +41,15 @@ from src.grocery_wizard.recipes.recipe_schema_columns import (
 )
 from src.grocery_wizard.recipes.scraper import ScrapeError, ingredients_to_text, scrape_recipe
 from src.grocery_wizard.recipes.weeknight import is_weeknight_friendly
+
+if TYPE_CHECKING:
+    from src.grocery_wizard.integrations.notion import (
+        ColumnInfo,
+        DatabaseSchema,
+        NotionFieldValues,
+        NotionRecipesDB,
+        Recipe,
+    )
 
 _LUNCH_DINNER_MEALS = frozenset({"Lunch", "Dinner"})
 

@@ -17,8 +17,7 @@ import json
 import random
 from dataclasses import dataclass, field
 from functools import lru_cache
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from src.grocery_wizard.config import WEEK_PLAN_PATH
 from src.grocery_wizard.ingredients.normalize import filter_ingredient_keys
@@ -34,6 +33,9 @@ from src.grocery_wizard.recipes.recipe_meal_plan_stats import (
     pick_weight_status_multiplier,
 )
 from src.grocery_wizard.recipes.recipe_schema_columns import diversity_planning_columns
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 DEFAULT_DIVERSITY_COLUMNS = ("Protein", "Dinner Category", "Cuisine")
 
@@ -397,7 +399,10 @@ def suggest_meals(
     locked_recipes = _resolve_locked_by_names(locked_names or [], all_recipes)[:meals]
 
     full_pool = filter_recipes(
-        all_recipes, active_filters, schema_columns, ingredient_index=ingredient_index
+        all_recipes,
+        active_filters,
+        schema_columns,
+        ingredient_index=ingredient_index,
     )
     locked_ids = {recipe.page_id for recipe in locked_recipes}
     locked_name_set = {recipe.name for recipe in locked_recipes}

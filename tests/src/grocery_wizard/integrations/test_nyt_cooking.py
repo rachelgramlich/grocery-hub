@@ -88,8 +88,8 @@ def test_ingredients_from_parts() -> None:
             "ingredients": [
                 {"display_quantity": "1 cup", "display_text": "flour"},
                 {"display_quantity": "", "display_text": "salt"},
-            ]
-        }
+            ],
+        },
     ]
     assert _ingredients_from_parts(parts) == ["1 cup flour", "salt"]
 
@@ -180,7 +180,7 @@ def test_parse_recipe_payload() -> None:
             "url": "/recipes/1019049-simple-pasta",
             "byline": "sam sifton",
             "parts": [{"ingredients": [{"display_quantity": "8 oz", "display_text": "spaghetti"}]}],
-        }
+        },
     )
     assert recipe.id == "1019049"
     assert recipe.name == "Simple Pasta"
@@ -215,7 +215,7 @@ def test_list_saved_recipes_pagination(credentials: NytCredentials) -> None:
                     {"id": "1", "name": "Recipe A", "url": "/recipes/1-a", "byline": "Author"},
                 ],
                 "collectables_count": 2,
-            }
+            },
         ),
         _mock_response(
             payload={
@@ -223,7 +223,7 @@ def test_list_saved_recipes_pagination(credentials: NytCredentials) -> None:
                     {"id": "2", "name": "Recipe B", "url": "/recipes/2-b", "byline": None},
                 ],
                 "collectables_count": 2,
-            }
+            },
         ),
     ]
 
@@ -241,8 +241,8 @@ def test_list_collections(credentials: NytCredentials) -> None:
             "collections": [
                 {"id": 10, "name": "Weeknight", "collectables_count": 3},
                 {"id": 11, "name": "Desserts", "collectables_count": 1},
-            ]
-        }
+            ],
+        },
     )
 
     collections = client.list_collections()
@@ -254,7 +254,7 @@ def test_find_collection_by_name_case_insensitive(credentials: NytCredentials) -
     session = MagicMock()
     client = NYTCookingClient(credentials, session=session)
     session.get.return_value = _mock_response(
-        payload={"collections": [{"id": 10, "name": "Weeknight", "collectables_count": 3}]}
+        payload={"collections": [{"id": 10, "name": "Weeknight", "collectables_count": 3}]},
     )
 
     found = client.find_collection_by_name("weeknight")
@@ -325,7 +325,7 @@ def test_get_recipe(credentials: NytCredentials) -> None:
             "cooking_time": {"display": "45 minutes", "minutes": 45},
             "prep_time": {"display": "15 minutes", "minutes": 15},
             "cook_time": {"display": "30 minutes", "minutes": 30},
-        }
+        },
     )
 
     recipe = client.get_recipe("99")
@@ -363,10 +363,10 @@ def test_sync_dry_run_skips_notion_writes(credentials: NytCredentials) -> None:
                     "id": "1",
                     "name": "New Recipe",
                     "url": "https://cooking.nytimes.com/recipes/1-new",
-                }
+                },
             ],
             "collectables_count": 1,
-        }
+        },
     )
 
     db = MagicMock()
@@ -398,10 +398,10 @@ def test_sync_reports_progress_with_recipe_counts(credentials: NytCredentials) -
                     "id": "1",
                     "name": "New Recipe",
                     "url": "https://cooking.nytimes.com/recipes/1-new",
-                }
+                },
             ],
             "collectables_count": 1,
-        }
+        },
     )
 
     db = MagicMock()
@@ -443,10 +443,10 @@ def test_sync_skips_existing_links(credentials: NytCredentials) -> None:
                     "id": "1",
                     "name": "Existing",
                     "url": "https://cooking.nytimes.com/recipes/1-existing",
-                }
+                },
             ],
             "collectables_count": 1,
-        }
+        },
     )
 
     db = MagicMock()
@@ -506,10 +506,10 @@ def test_sync_creates_missing_recipes(credentials: NytCredentials) -> None:
                     "id": "42",
                     "name": "Fresh Recipe",
                     "url": "https://cooking.nytimes.com/recipes/42-fresh",
-                }
+                },
             ],
             "collectables_count": 1,
-        }
+        },
     )
 
     db = MagicMock()
@@ -529,7 +529,7 @@ def test_sync_creates_missing_recipes(credentials: NytCredentials) -> None:
                         "Link": "https://cooking.nytimes.com/recipes/42-fresh",
                         "Ingredients": "2 cups broth\n1 onion",
                     },
-                )
+                ),
             ],
         ) as add_mock,
         patch(
@@ -589,8 +589,8 @@ def test_prompt_collection_choice_picks_folder(credentials: NytCredentials) -> N
                     "collections": [
                         {"id": 10, "name": "Weeknight", "collectables_count": 3},
                         {"id": 11, "name": "Desserts", "collectables_count": 1},
-                    ]
-                }
+                    ],
+                },
             )
         if "recipe_box_search" in url:
             return _mock_response(payload={"collectables": [], "collectables_count": 12})
@@ -617,8 +617,8 @@ def test_prompt_collection_choice_picks_first_folder(credentials: NytCredentials
                 payload={
                     "collections": [
                         {"id": 10, "name": "Weeknight", "collectables_count": 3},
-                    ]
-                }
+                    ],
+                },
             )
         raise AssertionError(f"Unexpected URL: {url}")
 
@@ -690,7 +690,7 @@ def test_run_recipe_box_sync_passes_folder_and_saves_report() -> None:
                 url="https://cooking.nytimes.com/recipes/1",
                 metadata={"Meal": "Dinner"},
                 flags=[],
-            )
+            ),
         ],
     )
     db = MagicMock()
@@ -756,7 +756,7 @@ def test_format_metadata_review_lists_recipes() -> None:
                 "name": "Pasta",
                 "metadata": {"Meal": "Dinner"},
                 "flags": [],
-            }
+            },
         ],
     }
     text = format_metadata_review(report)
@@ -1461,7 +1461,7 @@ def test_add_prefetched_recipes_cleans_ingredients_like_the_add_recipe_flow() ->
                     "115 g (about 1 cup) all-purpose flour",
                     "85 g (6 tablespoons) cold butter, cubed",
                 ],
-            )
+            ),
         ],
         no_confirm=True,
     )

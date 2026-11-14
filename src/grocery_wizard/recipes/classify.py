@@ -5,9 +5,8 @@ from __future__ import annotations
 __all__ = ["MEALS_WITHOUT_DINNER_CATEGORY", "classify_column", "classify_recipe"]
 
 import re
-from collections.abc import Iterable
+from typing import TYPE_CHECKING
 
-from src.grocery_wizard.integrations.notion import NotionFieldValues
 from src.grocery_wizard.recipes.recipe_meal_plan_stats import is_meal_plan_tracking_column
 from src.grocery_wizard.recipes.recipe_schema_columns import (
     classification_rules_key,
@@ -15,6 +14,11 @@ from src.grocery_wizard.recipes.recipe_schema_columns import (
     is_dinner_lunch_category_column,
 )
 from src.grocery_wizard.recipes.weeknight import is_weeknight_friendly
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+
+    from src.grocery_wizard.integrations.notion import NotionFieldValues
 
 # Column name (lowercase) -> option -> keywords
 # Options must match the user's Notion database (see README / plan).

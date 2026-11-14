@@ -61,7 +61,7 @@ def _render_nyt_credentials_panel() -> bool:
         return True
     st.warning(
         "NYT credentials are not set. Add `NYT_S_COOKIE` and `NYT_REGI_ID` "
-        "(or `NYT_USER_ID`) to your environment — see the package README."
+        "(or `NYT_USER_ID`) to your environment — see the package README.",
     )
     return False
 
@@ -289,7 +289,7 @@ def _execute_nyt_recipe_box_sync(
             progress_bar = st.progress(
                 0.0,
                 text=_sync_progress_label(
-                    NytSyncProgressUpdate(message="", processed=0, total=folder.recipe_count)
+                    NytSyncProgressUpdate(message="", processed=0, total=folder.recipe_count),
                 ),
             )
 
@@ -345,7 +345,7 @@ def _execute_nyt_recipe_box_sync(
     if dry_run:
         st.info(
             "Dry run finished — Notion was not updated. "
-            "Uncheck dry run and choose Sync to Notion to write new recipes."
+            "Uncheck dry run and choose Sync to Notion to write new recipes.",
         )
     elif summary.notion_writes:
         invalidate_recipes_after_write(schema_may_change=True)
@@ -369,7 +369,7 @@ def _execute_nyt_recipe_box_sync(
         if flagged and not dry_run:
             st.caption(
                 f"{flagged} recipe(s) flagged — review metadata in Notion or expand "
-                "Metadata review above."
+                "Metadata review above.",
             )
 
 
@@ -384,7 +384,7 @@ def render_nyt_sync_controls() -> None:
     if not folders:
         st.info(
             "No NYT recipe-box folders found. Create folders in NYT Cooking, "
-            "then choose **Refresh folders**."
+            "then choose **Refresh folders**.",
         )
         return
 
