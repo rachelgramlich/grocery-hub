@@ -51,14 +51,10 @@ import requests
 
 from src.grocery_wizard.config import NYT_LAST_SYNC_PATH
 from src.grocery_wizard.integrations.notion import DEFAULT_NYT_SYNCED_COLUMN
+from src.grocery_wizard.recipes.scraper import REQUEST_TIMEOUT, USER_AGENT
 
 SITE = "https://cooking.nytimes.com"
 API_HEADERS = {"x-cooking-api": "cooking-frontend", "accept": "*/*"}
-USER_AGENT = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-)
-REQUEST_TIMEOUT = 30
 DEFAULT_PER_PAGE = 48
 DEFAULT_NYT_ORPHAN_FOLDER = "1 to make"
 NYT_ORPHAN_FOLDER_ENV = "GROCERY_WIZARD_NYT_ORPHAN_FOLDER"
