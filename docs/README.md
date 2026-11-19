@@ -25,6 +25,7 @@ Start here when you need a guide, UI reference, or quality sign-off doc. **Code*
 | Run `/performance-audit` | [`quality/performance-audit.md`](quality/performance-audit.md) |
 | Contribute / lint / tests | [`CONTRIBUTING.md`](../CONTRIBUTING.md) |
 | Agent workflows | [`AGENTS.md`](../AGENTS.md) |
+| Deferred: AI PR review (Bugbot) | [#551](https://github.com/rachelgramlich/grocery-wizard/issues/551) |
 
 ## Package-local docs
 
