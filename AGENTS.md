@@ -106,7 +106,7 @@ Skills (committed): `.cursor/skills/tidy-first/SKILL.md` (mirrored under `.agent
 1. PR title: `#<issue-number>: <issue title>` (truncate title if needed for GitHub limits)
 2. PR body: full **`.github/pull_request_template.md`** (Summary, Test plan, Manual verification) plus an **`## Issue`** section with **`Closes #<issue-number>`** — see **Close issues via PR body** below
 3. Create PRs **ready for review** (not draft) unless the user asks for a draft.
-4. **Cloud Agents — after `create_pr`:** run the built-in **`/review`** command (**`~/.cursor/skills-cursor/review/SKILL.md`**). When this chat opened the PR, default to **bugbot** unless the user picked **security**. Incorporate findings (fix, re-run verify, push). **`subscribe_github_pr`**; on review comments, reply, **`resolve_comment`** when fixed, push, re-subscribe until merge/close.
+4. **Cloud Agents — after `create_pr`:** run **`/review`** (follow **`~/.cursor/skills-cursor/review/SKILL.md`**). Incorporate findings (fix, re-run verify, push). **`subscribe_github_pr`**; on review comments, reply, **`resolve_comment`** when fixed, push, re-subscribe until merge/close.
 5. Manual UAT: non-UI → agent runs checks and posts sign-off via **`gh pr comment`** (see `/work-on-issue`); UI → run **`just smoke-ui`** before PR ready, and Cloud agents **must** browser-smoke Streamlit when Notion preflight succeeds (**prod** `NOTION_*` in `.env` **or** Cloud **`NOTION_CI_*`** secrets per block above), then user confirms in chat (default) before sign-off. **Always** state **`Holistic smoke: …`** and **`Browser smoke: …`** in chat and the PR — details in `/work-on-issue` and **`/app-smoke`**
 
 Do not close backlog issues by hand — merge with `Closes #N` in the **PR description** (not comments).
@@ -150,7 +150,7 @@ When this chat **pushes** a branch that has (or will have) a PR:
 3. **On failure notification:** read failed logs (`gh run view --log-failed`, or **`ci-investigator`** / **`ManagePullRequest` `get_ci_status`**), fix, commit, push, and **re-subscribe** until checks are green or you are blocked and must ask the user.
 4. **On success:** unsubscribe CI waiters you no longer need (see subscribe skill); say CI is green in chat/PR when signing off.
 
-Optional: also subscribe to the PR (`subscribe_github_pr`) when you expect review comments. This is **per chat / per PR**, not a global GitHub setting.
+When this chat **created** the PR, **`subscribe_github_pr`** is required (backlog ship checklist §4), not optional.
 
 - **UI regression tests:** Import `APP_PATH`, `UI_ROOT`, `ui_source`, `pantry_page_source` from `tests/src/grocery_wizard/ui/ui_source.py` — do not copy Streamlit path literals into individual tests.
 - **Dedupe constants:** One owning module for repeated paths or regex — `src/grocery_wizard/paths.py` and `tests/repo_paths.py` for tree anchors; `APP_THEME_STATIC_CSS` in `theme.py`; unicode/qty patterns in `ingredients/_patterns.py`; shared CLI deprecation strings in `cli/` shims. Full map: `docs/architecture/path-anchors.md`.
