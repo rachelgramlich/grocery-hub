@@ -413,9 +413,7 @@ def test_sync_tags_existing_when_nyt_checkbox_unset(credentials: NytCredentials)
 
     assert summary.skipped_existing == 1
     assert summary.updated_existing == 1
-    db.update_recipe.assert_called_once_with(
-        "page-1", {"Synced from NYT recipe box": True}
-    )
+    db.update_recipe.assert_called_once_with("page-1", {"Synced from NYT recipe box": True})
     add_mock.assert_not_called()
 
 
@@ -800,7 +798,9 @@ def test_format_sync_summary_includes_counts() -> None:
     from src.grocery_wizard.integrations.nyt_cooking import NytSyncSummary, format_sync_summary
 
     text = format_sync_summary(
-        NytSyncSummary(total=10, skipped_existing=3, updated_existing=1, created=2, dry_run=0, failed=1)
+        NytSyncSummary(
+            total=10, skipped_existing=3, updated_existing=1, created=2, dry_run=0, failed=1
+        )
     )
     assert "10 in NYT folder" in text
     assert "3 matched existing" in text

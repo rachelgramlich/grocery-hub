@@ -845,11 +845,7 @@ def _process_saved_recipe_in_sync(
     if existing:
         summary.skipped_existing += 1
         nyt_column = db.nyt_synced_column_name()
-        if (
-            not dry_run
-            and nyt_column
-            and existing.properties.get(nyt_column) is not True
-        ):
+        if not dry_run and nyt_column and existing.properties.get(nyt_column) is not True:
             db.update_recipe(existing.page_id, {nyt_column: True})
             summary.updated_existing += 1
             _notify_sync_progress(
