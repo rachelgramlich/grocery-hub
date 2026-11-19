@@ -14,7 +14,9 @@ from typing import Final
 # WCAG 2.x contrast ratio for normal text (AA).
 MIN_CONTRAST_RATIO_AA: Final[float] = 4.5
 
-APP_THEME_STATIC_CSS = Path(__file__).resolve().parent / "static" / "app_theme.css"
+_UI_STATIC_DIR = Path(__file__).resolve().parent / "static"
+APP_THEME_STATIC_CSS = _UI_STATIC_DIR / "app_theme.css"
+EXTERNAL_LINKS_JS = _UI_STATIC_DIR / "external_links.js"
 
 
 @dataclass(frozen=True, slots=True)
@@ -496,3 +498,11 @@ def app_theme_css(tokens: ThemeTokens = GW_THEME) -> str:
         }}
         </style>
         """
+
+
+def app_external_links_script() -> str:
+    """Return ``<script>`` that opens app hyperlinks in a new tab (idempotent)."""
+    if EXTERNAL_LINKS_JS.is_file():
+        js = EXTERNAL_LINKS_JS.read_text(encoding="utf-8")
+        return f"<script>\n{js}\n</script>"
+    return ""

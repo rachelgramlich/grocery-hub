@@ -1286,18 +1286,18 @@ def _weeknight_column_for_reclassify(db: Any) -> str:
     return weeknight_column
 
 
-def _fetch_reclassify_total_minutes(
+def _fetch_reclassify_nyt_recipe(
     client: NYTCookingClient,
     recipe: Any,
     summary: NytReclassifySummary,
     *,
     on_progress: NytSyncProgressCallback | None,
-) -> float | None:
+) -> NytRecipe | None:
     recipe_id = _recipe_id_from_url(recipe.link or "")
     if not recipe_id:
         return None
     try:
-        nyt_recipe = client.get_recipe(recipe_id)
+        return client.get_recipe(recipe_id)
     except NYTCookingError:
         summary.api_failures += 1
         from src.grocery_wizard.recipes.recipe_maintenance import format_recipe_progress_line
@@ -1307,8 +1307,6 @@ def _fetch_reclassify_total_minutes(
             format_recipe_progress_line("Could not fetch NYT timing for: ", recipe),
         )
         return None
-    else:
-        return nyt_recipe.total_time_minutes
 
 
 def _build_reclassify_field_updates(
@@ -1318,6 +1316,8 @@ def _build_reclassify_field_updates(
     new_meal: Any,
     old_meal: Any,
     total_minutes: float | None,
+    prep_minutes: float | None,
+    cook_minutes: float | None,
     weeknight_column: str,
     dinner_category_column: str,
     summary: NytReclassifySummary,
@@ -1352,6 +1352,8 @@ def _build_reclassify_field_updates(
             title,
             meal=effective_meal,
             total_minutes=total_minutes,
+            prep_minutes=prep_minutes,
+            cook_minutes=cook_minutes,
         )
         old_weeknight = bool(recipe.properties.get(weeknight_column))
         if new_weeknight != old_weeknight:
@@ -1457,15 +1459,18 @@ def reclassify_nyt_synced_recipes(
         new_meal = inferred.get("Meal")
         old_meal = recipe.properties.get("Meal")
 
-        total_minutes = _fetch_reclassify_total_minutes(
-            client, recipe, summary, on_progress=on_progress
-        )
+        nyt_recipe = _fetch_reclassify_nyt_recipe(client, recipe, summary, on_progress=on_progress)
+        total_minutes = nyt_recipe.total_time_minutes if nyt_recipe else None
+        prep_minutes = nyt_recipe.prep_time_minutes if nyt_recipe else None
+        cook_minutes = nyt_recipe.cook_time_minutes if nyt_recipe else None
         fields = _build_reclassify_field_updates(
             recipe,
             schema=db.schema,
             new_meal=new_meal,
             old_meal=old_meal,
             total_minutes=total_minutes,
+            prep_minutes=prep_minutes,
+            cook_minutes=cook_minutes,
             weeknight_column=weeknight_column,
             dinner_category_column=dinner_category_column,
             summary=summary,

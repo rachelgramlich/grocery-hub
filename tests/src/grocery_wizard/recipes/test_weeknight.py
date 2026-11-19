@@ -4,6 +4,7 @@ from src.grocery_wizard.recipes.classify import classify_recipe
 from src.grocery_wizard.recipes.weeknight import (
     DEFAULT_WEEKNIGHT_COLUMN,
     is_weeknight_friendly,
+    weeknight_timing_minutes,
 )
 
 MEAL_OPTIONS = ["Breakfast", "Lunch", "Dinner", "Snack", "Dessert"]
@@ -22,6 +23,24 @@ def test_weeknight_false_when_dinner_over_60_minutes_without_title_hint() -> Non
         "Slow Braised Short Ribs",
         meal="Dinner",
         total_minutes=180,
+    )
+
+
+def test_weeknight_uses_prep_plus_cook_when_total_includes_marinating() -> None:
+    assert weeknight_timing_minutes(total_minutes=75, prep_minutes=20, cook_minutes=25) == 45
+    assert is_weeknight_friendly(
+        "Bulgogi-Style Tofu",
+        meal="Dinner",
+        total_minutes=75,
+        prep_minutes=20,
+        cook_minutes=25,
+    )
+    assert not is_weeknight_friendly(
+        "Slow Braised Short Ribs",
+        meal="Dinner",
+        total_minutes=240,
+        prep_minutes=30,
+        cook_minutes=180,
     )
 
 
