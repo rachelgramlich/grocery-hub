@@ -27,6 +27,7 @@ from src.grocery_wizard.recipes.recipe_meal_plan_stats import (
     filter_columns_for_recipe_classify,
     is_meal_plan_tracking_column,
 )
+from src.grocery_wizard.recipes.recipe_schema_columns import is_dinner_lunch_category_column
 from src.grocery_wizard.recipes.scraper import ScrapeError, ingredients_to_text, scrape_recipe
 from src.grocery_wizard.recipes.weeknight import is_weeknight_friendly
 
@@ -139,8 +140,8 @@ def metadata_filter_columns_for_meals(
         elif key == "protein":
             if unknown_meal or meals & _LUNCH_DINNER_MEALS:
                 columns.append(col)
-        elif key == "dinner category":
-            if unknown_meal or "Dinner" in meals:
+        elif is_dinner_lunch_category_column(col.name):
+            if unknown_meal or meals & {"Dinner", "Lunch"}:
                 columns.append(col)
         elif key == "tags":
             if unknown_meal or meals != {"Drink"}:
@@ -217,6 +218,66 @@ def recipes_missing_metadata(recipes: list[Recipe], schema: DatabaseSchema) -> l
     return [recipe for recipe in recipes if recipe_missing_metadata(recipe, schema)]
 
 
+def dinner_category_column_name(schema: DatabaseSchema) -> str | None:
+    from src.grocery_wizard.recipes.recipe_schema_columns import (
+        dinner_lunch_category_column_from_schema,
+    )
+
+    return dinner_lunch_category_column_from_schema(schema)
+
+
+def recipe_has_invalid_dinner_category(recipe: Recipe, schema: DatabaseSchema) -> bool:
+    """Dinner Category set when Meal is Dessert, Drink, or Breakfast."""
+    from src.grocery_wizard.recipes.classify import MEALS_WITHOUT_DINNER_CATEGORY
+
+    column = dinner_category_column_name(schema)
+    if not column:
+        return False
+    meals = meal_values_on_recipe(recipe, schema)
+    if not meals or not meals & MEALS_WITHOUT_DINNER_CATEGORY:
+        return False
+    current = recipe.properties.get(column)
+    return not is_blank_metadata_value("multi_select", current)
+
+
+def recipes_invalid_dinner_category(
+    recipes: list[Recipe],
+    schema: DatabaseSchema,
+) -> list[Recipe]:
+    return [recipe for recipe in recipes if recipe_has_invalid_dinner_category(recipe, schema)]
+
+
+def run_strip_invalid_dinner_categories(
+    db: NotionRecipesDB,
+    candidates: list[Recipe],
+    *,
+    on_progress: ProgressCallback | None = None,
+    on_fraction: FractionCallback | None = None,
+) -> BackfillSummary:
+    """Clear Dinner Category when Meal is Dessert, Drink, or Breakfast (overwrites bad values)."""
+    column = dinner_category_column_name(db.schema)
+    summary = BackfillSummary(scanned=len(candidates))
+    if not column:
+        summary.skipped = len(candidates)
+        return summary
+
+    total = len(candidates)
+    for index, recipe in enumerate(candidates, start=1):
+        if on_fraction and total:
+            on_fraction(index / total)
+        if not recipe_has_invalid_dinner_category(recipe, db.schema):
+            summary.skipped += 1
+            continue
+        db.update_recipe(recipe.page_id, {column: []})
+        summary.succeeded += 1
+        if on_progress:
+            on_progress(f"Cleared Dinner Category: {recipe.name}")
+
+    if on_fraction:
+        on_fraction(1.0)
+    return summary
+
+
 def _ingredient_lines(recipe: Recipe) -> list[str]:
     return [line.strip() for line in ingredients_text(recipe).splitlines() if line.strip()]
 
@@ -228,6 +289,7 @@ def _blank_metadata_updates(
     *,
     eligible_names: set[str],
 ) -> NotionFieldValues:
+    """Only write inferred values into empty cells; never replace existing non-blank tags."""
     updates: NotionFieldValues = {}
     columns_by_name = {col.name: col for col in [*schema.filter_columns, *schema.checkbox_columns]}
     for name in eligible_names:

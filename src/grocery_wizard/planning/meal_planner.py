@@ -33,8 +33,9 @@ from src.grocery_wizard.recipes.recipe_meal_plan_stats import (
     pick_weight_rejection_penalty,
     pick_weight_status_multiplier,
 )
+from src.grocery_wizard.recipes.recipe_schema_columns import diversity_planning_columns
 
-DIVERSITY_COLUMNS = ("Protein", "Dinner Category", "Cuisine")
+DEFAULT_DIVERSITY_COLUMNS = ("Protein", "Dinner Category", "Cuisine")
 
 _INGREDIENT_KEYS_CACHE_SIZE = 4096
 
@@ -201,20 +202,29 @@ TOP_K_DIVERSE_MAX = 15
 RECENT_PLAN_PENALTY = 4
 
 
-def _diversity_score(recipe: Recipe, selected: list[Recipe]) -> tuple[int, int, int]:
-    used: dict[str, set[str]] = {col: set() for col in DIVERSITY_COLUMNS}
+def _diversity_score(
+    recipe: Recipe,
+    selected: list[Recipe],
+    *,
+    diversity_columns: tuple[str, ...],
+) -> tuple[int, ...]:
+    used: dict[str, set[str]] = {col: set() for col in diversity_columns}
     for prior in selected:
-        for column in DIVERSITY_COLUMNS:
+        for column in diversity_columns:
             used[column].update(_recipe_tags(prior, column))
 
-    protein_new = len(_recipe_tags(recipe, "Protein") - used["Protein"])
-    category_new = len(_recipe_tags(recipe, "Dinner Category") - used["Dinner Category"])
-    cuisine_new = len(_recipe_tags(recipe, "Cuisine") - used["Cuisine"])
-    return (protein_new, category_new, cuisine_new)
+    return tuple(
+        len(_recipe_tags(recipe, column) - used[column]) for column in diversity_columns
+    )
 
 
-def _diversity_total(recipe: Recipe, selected: list[Recipe]) -> int:
-    return sum(_diversity_score(recipe, selected))
+def _diversity_total(
+    recipe: Recipe,
+    selected: list[Recipe],
+    *,
+    diversity_columns: tuple[str, ...],
+) -> int:
+    return sum(_diversity_score(recipe, selected, diversity_columns=diversity_columns))
 
 
 def _effective_top_k(candidate_count: int) -> int:
@@ -230,10 +240,11 @@ def _pick_weight(
     selected: list[Recipe],
     recent_names: set[str],
     *,
+    diversity_columns: tuple[str, ...],
     status_column: str | None = None,
     rejections_column: str | None = None,
 ) -> float:
-    score = float(_diversity_total(recipe, selected))
+    score = float(_diversity_total(recipe, selected, diversity_columns=diversity_columns))
     if recipe.name in recent_names:
         score = max(0.0, score - RECENT_PLAN_PENALTY)
     score = max(1.0, score + 1.0)
@@ -259,6 +270,7 @@ def pick_diverse_recipe(
     candidates: list[Recipe],
     selected: list[Recipe],
     *,
+    diversity_columns: tuple[str, ...] | None = None,
     top_k: int | None = None,
     recent_names: set[str] | None = None,
     status_column: str | None = None,
@@ -270,6 +282,8 @@ def pick_diverse_recipe(
     if len(candidates) == 1:
         return candidates[0]
 
+    columns = diversity_columns or DEFAULT_DIVERSITY_COLUMNS
+
     pool = list(candidates)
     if selected:
         last = selected[-1]
@@ -279,7 +293,10 @@ def pick_diverse_recipe(
 
     recent = recent_names or set()
     scored = sorted(
-        ((recipe, _diversity_total(recipe, selected)) for recipe in pool),
+        (
+            (recipe, _diversity_total(recipe, selected, diversity_columns=columns))
+            for recipe in pool
+        ),
         key=lambda item: item[1],
         reverse=True,
     )
@@ -293,6 +310,7 @@ def pick_diverse_recipe(
                     recipe,
                     selected,
                     recent,
+                    diversity_columns=columns,
                     status_column=status_column,
                     rejections_column=rejections_column,
                 ),
@@ -308,6 +326,7 @@ def select_diverse_meals(
     pool: list[Recipe],
     count: int,
     *,
+    diversity_columns: tuple[str, ...] | None = None,
     recent_names: set[str] | None = None,
     status_column: str | None = None,
     rejections_column: str | None = None,
@@ -321,6 +340,7 @@ def select_diverse_meals(
         pick = pick_diverse_recipe(
             remaining,
             selected,
+            diversity_columns=diversity_columns,
             recent_names=recent_names,
             status_column=status_column,
             rejections_column=rejections_column,
@@ -392,6 +412,7 @@ def suggest_meals(
     pool = filter_recipes_for_auto_suggest(pool, status_column=status_column)
 
     recent = recent_names if recent_names is not None else load_recent_plan_names()
+    diversity_columns = diversity_planning_columns(schema_columns)
 
     remaining_slots = meals - len(locked_recipes)
     suggested: list[str] = []
@@ -399,6 +420,7 @@ def suggest_meals(
         picked = select_diverse_meals(
             pool,
             remaining_slots,
+            diversity_columns=diversity_columns,
             recent_names=recent,
             status_column=status_column,
             rejections_column=rejections_column,
@@ -414,6 +436,7 @@ def replace_meals_in_plan(
     *,
     all_recipes: list[Recipe],
     pool: list[Recipe],
+    schema_columns: dict[str, ColumnInfo] | None = None,
     rejected_names: set[str] | None = None,
     recent_names: set[str] | None = None,
     status_column: str | None = None,
@@ -428,6 +451,9 @@ def replace_meals_in_plan(
     session_rejected = set(rejected_names or ())
     replace_set = set(names_to_replace)
     recent = recent_names if recent_names is not None else load_recent_plan_names()
+    diversity_columns = (
+        diversity_planning_columns(schema_columns) if schema_columns else None
+    )
 
     for index, name in enumerate(updated):
         if name not in replace_set:
@@ -454,6 +480,7 @@ def replace_meals_in_plan(
         replacement = pick_diverse_recipe(
             candidates,
             plan_recipes,
+            diversity_columns=diversity_columns,
             recent_names=recent,
             status_column=status_column,
             rejections_column=rejections_column,

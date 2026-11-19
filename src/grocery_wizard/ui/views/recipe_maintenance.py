@@ -17,6 +17,7 @@ from src.grocery_wizard.recipes.recipe_maintenance import (
     FractionCallback,
     ProgressCallback,
     format_backfill_summary,
+    recipes_invalid_dinner_category,
     recipes_manual_ingredients_in_notion,
     recipes_missing_cover_images,
     recipes_missing_ingredients,
@@ -25,6 +26,7 @@ from src.grocery_wizard.recipes.recipe_maintenance import (
     run_image_backfill,
     run_ingredients_backfill,
     run_metadata_backfill,
+    run_strip_invalid_dinner_categories,
 )
 from src.grocery_wizard.ui.db_access import get_db
 from src.grocery_wizard.ui.meal_plan_status_ui import (
@@ -124,6 +126,7 @@ def render_recipe_maintenance() -> None:
 
     missing_ingredients = recipes_missing_ingredients(recipes, schema)
     missing_metadata = recipes_missing_metadata(recipes, schema)
+    invalid_dinner_category = recipes_invalid_dinner_category(recipes, schema)
     missing_images = recipes_missing_cover_images(recipes, schema)
     manual_ingredients = recipes_manual_ingredients_in_notion(recipes, schema)
     possibly_missing_checkboxes = recipes_possibly_missing_all_checkboxes(recipes, schema)
@@ -167,9 +170,10 @@ def render_recipe_maintenance() -> None:
     with st.container(border=True):
         st.markdown("**Backfill missing metadata**")
         st.caption(
-            "Fills empty Meal, Cuisine, and meal-appropriate filters (e.g. Dinner Category "
-            "only when Meal is Dinner; Weeknight Friendly for dinners). Instructions, NYT "
-            "sync, and Showstopper are not auto-filled."
+            "Fills **empty** Meal, Cuisine, and meal-appropriate filters only — it does **not** "
+            "overwrite values already set (for example Dessert + Dinner/lunch category N/A stays "
+            "wrong until you use the strip action below). Weeknight Friendly applies for dinners. "
+            "Instructions, NYT sync, and Showstopper are not auto-filled."
         )
         st.write(f"**{len(missing_metadata)}** recipe(s) with gaps in metadata columns.")
         if st.button(
@@ -194,6 +198,39 @@ def render_recipe_maintenance() -> None:
                 )
 
             _run_backfill_with_progress(label="Metadata backfill", runner=_metadata_runner)
+
+    with st.container(border=True):
+        st.markdown("**Strip Dinner/lunch category on desserts / drinks / breakfast**")
+        st.caption(
+            "Clears Dinner/lunch category when Meal is Dessert, Drink, or Breakfast "
+            "(fixes mistaken N/A or One-Pot / One-Pan on brownies and similar)."
+        )
+        st.write(
+            f"**{len(invalid_dinner_category)}** recipe(s) with a dinner/lunch category to clear."
+        )
+        if st.button(
+            "Strip invalid dinner categories",
+            type="secondary",
+            key="recipe_maint_strip_dinner_category",
+            disabled=not invalid_dinner_category,
+        ):
+
+            def _strip_runner(
+                *,
+                on_progress: ProgressCallback | None = None,
+                on_fraction: FractionCallback | None = None,
+            ) -> BackfillSummary:
+                return run_strip_invalid_dinner_categories(
+                    db,
+                    invalid_dinner_category,
+                    on_progress=on_progress,
+                    on_fraction=on_fraction,
+                )
+
+            _run_backfill_with_progress(
+                label="Strip invalid dinner categories",
+                runner=_strip_runner,
+            )
 
     with st.container(border=True):
         st.markdown("**Backfill missing cover images**")

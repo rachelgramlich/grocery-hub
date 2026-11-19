@@ -758,6 +758,65 @@ def test_reclassify_updates_meal_and_weeknight() -> None:
     db.update_recipe.assert_any_call("page-2", {"Meal": "Lunch"})
 
 
+def test_reclassify_clears_dinner_category_on_dessert() -> None:
+    from dataclasses import dataclass
+
+    from src.grocery_wizard.integrations.notion import ColumnInfo, DatabaseSchema
+    from src.grocery_wizard.integrations.nyt_cooking import reclassify_nyt_synced_recipes
+
+    @dataclass
+    class StubRecipe:
+        page_id: str
+        name: str
+        link: str | None
+        ingredients: str | None
+        properties: dict
+
+    db = MagicMock()
+    db.nyt_synced_column_name.return_value = "Synced from NYT recipe box"
+    db.schema = DatabaseSchema(
+        name_column="Name",
+        link_column="Link",
+        ingredients_column="Ingredients",
+        filter_columns=[
+            ColumnInfo(name="Meal", type="multi_select", options=["Dessert", "Dinner"]),
+            ColumnInfo(
+                name="Dinner Category",
+                type="multi_select",
+                options=["N/A", "One-Pot / One-Pan"],
+            ),
+        ],
+        checkbox_columns=[],
+        all_columns={
+            "Name": ColumnInfo(name="Name", type="title"),
+            "Link": ColumnInfo(name="Link", type="url"),
+            "Meal": ColumnInfo(name="Meal", type="multi_select"),
+            "Dinner Category": ColumnInfo(name="Dinner Category", type="multi_select"),
+        },
+    )
+    db.query_recipes.return_value = [
+        StubRecipe(
+            page_id="page-brownie",
+            name="Skillet Brownie",
+            link="https://cooking.nytimes.com/recipes/1-skillet-brownie",
+            ingredients="chocolate\nbutter",
+            properties={
+                "Synced from NYT recipe box": True,
+                "Meal": ["Dessert"],
+                "Dinner Category": ["One-Pot / One-Pan"],
+            },
+        ),
+    ]
+
+    client = MagicMock()
+    client.get_recipe.return_value = MagicMock(total_time_minutes=None)
+
+    summary = reclassify_nyt_synced_recipes(db, client, dry_run=False)
+
+    assert summary.dinner_category_cleared == 1
+    db.update_recipe.assert_called_once_with("page-brownie", {"Dinner Category": []})
+
+
 def test_format_sync_summary_includes_counts() -> None:
     from src.grocery_wizard.integrations.nyt_cooking import NytSyncSummary, format_sync_summary
 

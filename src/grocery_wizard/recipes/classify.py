@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-__all__ = ["classify_column", "classify_recipe"]
+__all__ = ["MEALS_WITHOUT_DINNER_CATEGORY", "classify_column", "classify_recipe"]
 
 import re
 from collections.abc import Iterable
@@ -162,7 +162,7 @@ SAVORY_MEAL_BLOCKERS = re.compile(
 
 SHEET_PAN_PATTERN = re.compile(r"\b(sheet[- ]pan|one[- ](?:pot|pan))\b", re.IGNORECASE)
 
-_MEALS_WITHOUT_DINNER_CATEGORY: frozenset[str] = frozenset({"Dessert", "Drink", "Breakfast"})
+MEALS_WITHOUT_DINNER_CATEGORY: frozenset[str] = frozenset({"Dessert", "Drink", "Breakfast"})
 
 DESSERT_PATTERN = re.compile(
     r"\b("
@@ -197,8 +197,10 @@ def classify_column(
     ingredients: Iterable[str],
     allowed_options: list[str] | None = None,
 ) -> str | None:
+    from src.grocery_wizard.recipes.recipe_schema_columns import classification_rules_key
+
     text = _normalize_text(title, ingredients)
-    rules = CLASSIFICATION_RULES.get(column_name.lower(), {})
+    rules = CLASSIFICATION_RULES.get(classification_rules_key(column_name), {})
 
     if column_name.lower() == "meal":
         return _classify_meal(text, rules, allowed_options)
@@ -236,6 +238,7 @@ def classify_recipe(
     meal_options: list[str] | None = None
 
     from src.grocery_wizard.recipes.recipe_meal_plan_stats import is_meal_plan_tracking_column
+    from src.grocery_wizard.recipes.recipe_schema_columns import is_dinner_lunch_category_column
 
     for column_name, column_type, options in filter_columns:
         if is_meal_plan_tracking_column(column_name):
@@ -260,8 +263,10 @@ def classify_recipe(
         meal_value = meal[0]
     else:
         meal_value = None
-    if meal_value in _MEALS_WITHOUT_DINNER_CATEGORY:
-        results.pop("Dinner Category", None)
+    if meal_value in MEALS_WITHOUT_DINNER_CATEGORY:
+        for key in list(results):
+            if is_dinner_lunch_category_column(key):
+                results.pop(key, None)
 
     if weeknight_column:
         results[weeknight_column] = is_weeknight_friendly(

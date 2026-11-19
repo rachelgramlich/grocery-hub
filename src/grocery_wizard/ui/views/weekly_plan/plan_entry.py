@@ -835,6 +835,7 @@ def _render_built_plan_meals(
                 names_to_replace,
                 all_recipes=all_recipes,
                 pool=suggestion_pool,
+                schema_columns=db.schema.all_columns,
                 rejected_names=rejected,
                 status_column=status_column,
                 rejections_column=rejections_column,

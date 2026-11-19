@@ -10,16 +10,19 @@ from src.grocery_wizard.recipes.recipe_maintenance import (
     infer_metadata_field_values,
     is_blank_metadata_value,
     recipe_has_cover_image,
+    recipe_has_invalid_dinner_category,
     recipe_manual_ingredients_in_notion,
     recipe_missing_cover_image,
     recipe_missing_ingredients,
     recipe_missing_metadata,
     recipe_possibly_missing_all_checkboxes,
+    recipes_invalid_dinner_category,
     recipes_missing_ingredients,
     recipes_missing_metadata,
     run_image_backfill,
     run_ingredients_backfill,
     run_metadata_backfill,
+    run_strip_invalid_dinner_categories,
 )
 from src.grocery_wizard.recipes.scraper import ScrapedRecipe, ScrapeError
 
@@ -208,6 +211,41 @@ def test_run_ingredients_backfill_counts_scrape_errors() -> None:
 
     assert summary.failed == 1
     db.update_recipe.assert_not_called()
+
+
+def test_recipe_has_invalid_dinner_category() -> None:
+    schema = _full_schema()
+    dessert_wrong = _recipe(meal="Dessert")
+    dessert_wrong.properties["Dinner Category"] = ["N/A"]
+    dinner_ok = _recipe(meal="Dinner")
+    dinner_ok.properties["Dinner Category"] = ["Pasta"]
+    assert recipe_has_invalid_dinner_category(dessert_wrong, schema)
+    assert not recipe_has_invalid_dinner_category(dinner_ok, schema)
+    assert len(recipes_invalid_dinner_category([dessert_wrong, dinner_ok], schema)) == 1
+
+
+def test_run_strip_invalid_dinner_categories() -> None:
+    schema = _full_schema()
+    db = MagicMock()
+    db.schema = schema
+    dessert_wrong = _recipe(meal="Dessert")
+    dessert_wrong.properties["Dinner Category"] = ["N/A"]
+    summary = run_strip_invalid_dinner_categories(db, [dessert_wrong])
+    assert summary.succeeded == 1
+    db.update_recipe.assert_called_once_with("page-1", {"Dinner Category": []})
+
+
+def test_infer_metadata_does_not_overwrite_non_blank_dinner_category() -> None:
+    schema = _full_schema()
+    db = MagicMock()
+    db.schema = schema
+    candidate = _recipe(ingredients="1 lb chicken", meal="Dessert", weeknight=False)
+    candidate.properties["Dinner Category"] = ["N/A"]
+
+    updates = infer_metadata_field_values(db, candidate)
+
+    assert "Dinner Category" not in updates
+    assert "Meal" not in updates
 
 
 def test_run_metadata_backfill_fills_blanks_only() -> None:
