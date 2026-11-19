@@ -5,6 +5,7 @@ from __future__ import annotations
 __all__ = ["DEFAULT_WEEKNIGHT_COLUMN", "WEEKNIGHT_MAX_MINUTES", "is_weeknight_friendly"]
 
 import re
+from typing import Any
 
 WEEKNIGHT_TITLE_PATTERN = re.compile(
     r"\b("
@@ -20,19 +21,27 @@ DEFAULT_WEEKNIGHT_COLUMN = "Dinner: Weeknight Friendly"
 WEEKNIGHT_MAX_MINUTES = 60
 
 
+def _meal_includes_dinner(meal: Any) -> bool:
+    if meal is None:
+        return False
+    if isinstance(meal, list):
+        return any(str(item).strip() == "Dinner" for item in meal if str(item).strip())
+    return str(meal).strip() == "Dinner"
+
+
 def is_weeknight_friendly(
     title: str,
     *,
-    meal: str | None,
+    meal: str | list[str] | None,
     total_minutes: float | None = None,
 ) -> bool:
     """Return whether a recipe qualifies as weeknight-friendly dinner.
 
-    Criteria (all require Meal=Dinner):
+    Criteria (require Meal to include Dinner — string or multi-select list):
     - Total cook time under 60 minutes when available, or
     - Title heuristics: quick, easy, weeknight, one-pot, sheet pan, etc.
     """
-    if meal != "Dinner":
+    if not _meal_includes_dinner(meal):
         return False
 
     if total_minutes is not None and total_minutes < WEEKNIGHT_MAX_MINUTES:
