@@ -33,7 +33,10 @@ def _schema_with_dinner_lunch(*, dinner_options: list[str]) -> DatabaseSchema:
 
 
 def test_collect_recipes_na_option_errors_ok() -> None:
-    assert collect_recipes_na_option_errors(_schema_with_dinner_lunch(dinner_options=["N/A", "Pasta"])) == []
+    assert (
+        collect_recipes_na_option_errors(_schema_with_dinner_lunch(dinner_options=["N/A", "Pasta"]))
+        == []
+    )
 
 
 def test_collect_recipes_na_option_errors_missing_na_on_dinner_lunch() -> None:

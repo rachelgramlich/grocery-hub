@@ -213,9 +213,7 @@ def _diversity_score(
         for column in diversity_columns:
             used[column].update(_recipe_tags(prior, column))
 
-    return tuple(
-        len(_recipe_tags(recipe, column) - used[column]) for column in diversity_columns
-    )
+    return tuple(len(_recipe_tags(recipe, column) - used[column]) for column in diversity_columns)
 
 
 def _diversity_total(
@@ -451,9 +449,7 @@ def replace_meals_in_plan(
     session_rejected = set(rejected_names or ())
     replace_set = set(names_to_replace)
     recent = recent_names if recent_names is not None else load_recent_plan_names()
-    diversity_columns = (
-        diversity_planning_columns(schema_columns) if schema_columns else None
-    )
+    diversity_columns = diversity_planning_columns(schema_columns) if schema_columns else None
 
     for index, name in enumerate(updated):
         if name not in replace_set:

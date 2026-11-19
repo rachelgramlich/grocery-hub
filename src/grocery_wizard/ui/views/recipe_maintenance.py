@@ -256,9 +256,7 @@ def render_recipe_maintenance() -> None:
             "which only fixes rule-invalid dinner/lunch tags and empty cells)."
         )
         if not nyt_col:
-            st.info(
-                "Add a **Synced from NYT recipe box** checkbox in Notion to use this step."
-            )
+            st.info("Add a **Synced from NYT recipe box** checkbox in Notion to use this step.")
         elif nyt_client is None:
             st.info("Set NYT credentials in `.env` to fetch cook times and run reclassify.")
         else:
