@@ -1482,29 +1482,108 @@ def reclassify_nyt_synced_recipes(
     return summary
 
 
-def format_reclassify_summary(summary: NytReclassifySummary) -> str:
-    lines = [
-        f"NYT reclassify — {summary.total} recipe(s)",
-        f"Meal changes: {summary.meal_changes}",
-        f"Weeknight friendly set: {summary.weeknight_set}",
-        f"Weeknight friendly cleared: {summary.weeknight_cleared}",
-        f"Dinner category cleared: {summary.dinner_category_cleared}",
-        f"Unchanged: {summary.unchanged}",
-    ]
+def _format_reclassify_value(value: Any) -> str:
+    """Stable display for old/new values in grouped reclassify summaries."""
+    if isinstance(value, bool):
+        return str(value)
+    if value is None:
+        return "(empty)"
+    if isinstance(value, (list, tuple)):
+        return repr(list(value))
+    if isinstance(value, str) and not value.strip():
+        return "(empty)"
+    if isinstance(value, str):
+        return value
+    return repr(value)
+
+
+def _reclassify_field_rank(field: str) -> tuple[int, str]:
+    from src.grocery_wizard.recipes.weeknight import DEFAULT_WEEKNIGHT_COLUMN
+
+    if field == "Meal":
+        return (0, field)
+    if field == DEFAULT_WEEKNIGHT_COLUMN or "Weeknight" in field:
+        return (1, field)
+    if "Category" in field:
+        return (2, field)
+    return (3, field)
+
+
+def reclassify_summary_updated_count(summary: NytReclassifySummary) -> int:
+    """Recipes with at least one metadata change (unique Notion page ids)."""
+    if not summary.changes:
+        return 0
+    return len({change.page_id for change in summary.changes if change.page_id})
+
+
+def format_reclassify_summary_headline(summary: NytReclassifySummary) -> str:
+    """One-line counts after NYT reclassify (progress bar + status label)."""
+    updated = reclassify_summary_updated_count(summary)
+    headline = (
+        f"NYT reclassify — {summary.total} recipes · {updated} updated · "
+        f"{summary.unchanged} unchanged"
+    )
+    subparts: list[str] = []
+    if summary.meal_changes:
+        subparts.append(f"meal {summary.meal_changes}")
+    if summary.weeknight_set:
+        subparts.append(f"weeknight set {summary.weeknight_set}")
+    if summary.weeknight_cleared:
+        subparts.append(f"weeknight cleared {summary.weeknight_cleared}")
+    if summary.dinner_category_cleared:
+        subparts.append(f"category {summary.dinner_category_cleared}")
     if summary.api_failures:
-        lines.append(f"NYT API timing failures: {summary.api_failures}")
+        subparts.append(f"NYT timing failures {summary.api_failures}")
+    if subparts:
+        headline += f" ({' · '.join(subparts)})"
+    return headline
 
-    notable = [change for change in summary.changes if change.field == "Meal"]
-    if notable:
-        lines.append("")
-        lines.append("Meal corrections:")
-        lines.extend(
-            f"  {change.name}: {change.old_value} -> {change.new_value}" for change in notable[:30]
+
+def format_reclassify_summary(summary: NytReclassifySummary) -> str:
+    """Grouped Markdown summary: headline, then field groups with Notion recipe links."""
+    lines = [format_reclassify_summary_headline(summary)]
+    if not summary.changes:
+        return lines[0]
+
+    from src.grocery_wizard.integrations.notion import Recipe
+    from src.grocery_wizard.recipes.recipe_maintenance import recipe_notion_markdown_link
+
+    buckets: dict[tuple[str, str, str], list[NytReclassifyChange]] = {}
+    for change in summary.changes:
+        group_key = (
+            change.field,
+            _format_reclassify_value(change.old_value),
+            _format_reclassify_value(change.new_value),
         )
-        if len(notable) > 30:
-            lines.append(f"  ... and {len(notable) - 30} more")
+        buckets.setdefault(group_key, []).append(change)
 
-    return "\n".join(lines)
+    group_items = sorted(
+        buckets.items(),
+        key=lambda item: (
+            _reclassify_field_rank(item[0][0]),
+            item[0][1],
+            item[0][2],
+        ),
+    )
+
+    lines.append("")
+    for (_field, old_display, new_display), changes in group_items:
+        field = changes[0].field
+        count = len(changes)
+        recipe_word = "recipe" if count == 1 else "recipes"
+        lines.append(f"**({count} {recipe_word}) {field}: `{old_display}` → `{new_display}`**")
+        for change in sorted(changes, key=lambda c: c.name.casefold()):
+            recipe = Recipe(
+                page_id=change.page_id,
+                name=change.name,
+                link=None,
+                ingredients=None,
+                properties={},
+            )
+            lines.append(f"- {recipe_notion_markdown_link(recipe)}")
+        lines.append("")
+
+    return "\n".join(lines).rstrip()
 
 
 def apply_metadata_corrections(

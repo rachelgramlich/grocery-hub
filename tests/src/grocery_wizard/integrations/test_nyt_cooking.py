@@ -1076,3 +1076,90 @@ def test_add_prefetched_recipes_cleans_ingredients_like_the_add_recipe_flow() ->
 
     saved = db.create_recipe.call_args.args[0]
     assert saved["Ingredients"].splitlines() == ["flour", "butter"]
+
+
+@pytest.fixture
+def nyt_reclassify_screenshot_summary():
+    """Scenario matching the user screenshot: 235 NYT-synced, three field writes."""
+    from src.grocery_wizard.integrations.nyt_cooking import (
+        NytReclassifyChange,
+        NytReclassifySummary,
+    )
+    from src.grocery_wizard.recipes.weeknight import DEFAULT_WEEKNIGHT_COLUMN
+
+    return NytReclassifySummary(
+        total=235,
+        meal_changes=1,
+        weeknight_cleared=2,
+        unchanged=233,
+        changes=[
+            NytReclassifyChange(
+                page_id="pasta-page-id",
+                name="Pasta Primavera",
+                field="Meal",
+                old_value=["Dinner"],
+                new_value=["Snack/Side"],
+            ),
+            NytReclassifyChange(
+                page_id="pasta-page-id",
+                name="Pasta Primavera",
+                field=DEFAULT_WEEKNIGHT_COLUMN,
+                old_value=True,
+                new_value=False,
+            ),
+            NytReclassifyChange(
+                page_id="bulgogi-page-id",
+                name="Bulgogi-Style Tofu",
+                field=DEFAULT_WEEKNIGHT_COLUMN,
+                old_value=True,
+                new_value=False,
+            ),
+        ],
+    )
+
+
+def test_format_reclassify_summary_headline_screenshot_scenario(
+    nyt_reclassify_screenshot_summary,
+) -> None:
+    from src.grocery_wizard.integrations.nyt_cooking import format_reclassify_summary_headline
+
+    headline = format_reclassify_summary_headline(nyt_reclassify_screenshot_summary)
+    assert headline == (
+        "NYT reclassify — 235 recipes · 2 updated · 233 unchanged (meal 1 · weeknight cleared 2)"
+    )
+
+
+def test_format_reclassify_summary_grouped_screenshot_scenario(
+    nyt_reclassify_screenshot_summary,
+) -> None:
+    from src.grocery_wizard.integrations.nyt_cooking import format_reclassify_summary
+    from src.grocery_wizard.recipes.weeknight import DEFAULT_WEEKNIGHT_COLUMN
+
+    text = format_reclassify_summary(nyt_reclassify_screenshot_summary)
+    assert text.startswith(
+        "NYT reclassify — 235 recipes · 2 updated · 233 unchanged (meal 1 · weeknight cleared 2)\n"
+    )
+    assert "**(1 recipe) Meal: `['Dinner']` → `['Snack/Side']`**" in text
+    assert "[Pasta Primavera](https://www.notion.so/pastapageid)" in text
+    assert f"**(2 recipes) {DEFAULT_WEEKNIGHT_COLUMN}: `True` → `False`**" in text
+    assert "[Bulgogi-Style Tofu](https://www.notion.so/" in text
+    meal_pos = text.index("**(1 recipe) Meal:")
+    weeknight_pos = text.index(f"**(2 recipes) {DEFAULT_WEEKNIGHT_COLUMN}:")
+    assert meal_pos < weeknight_pos
+    assert text.count("[Pasta Primavera]") == 2
+
+
+def test_format_reclassify_summary_no_changes_headline_only() -> None:
+    from src.grocery_wizard.integrations.nyt_cooking import (
+        NytReclassifySummary,
+        format_reclassify_summary,
+        format_reclassify_summary_headline,
+        reclassify_summary_updated_count,
+    )
+
+    summary = NytReclassifySummary(total=10, unchanged=10)
+    assert reclassify_summary_updated_count(summary) == 0
+    assert format_reclassify_summary_headline(summary) == (
+        "NYT reclassify — 10 recipes · 0 updated · 10 unchanged"
+    )
+    assert format_reclassify_summary(summary) == format_reclassify_summary_headline(summary)
