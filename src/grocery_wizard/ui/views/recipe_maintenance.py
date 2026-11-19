@@ -14,6 +14,7 @@ from src.grocery_wizard.integrations.notion_views import (
 from src.grocery_wizard.integrations.nyt_cooking import (
     NYTCookingClient,
     NytReclassifyChange,
+    NytSyncProgressUpdate,
     credentials_status,
     format_reclassify_summary,
     reclassify_nyt_synced_recipes,
@@ -58,6 +59,12 @@ def _write_backfill_progress_line(line: str) -> None:
         st.markdown(line)
     else:
         st.write(line)
+
+
+def _nyt_sync_progress_log_line(update: NytSyncProgressUpdate) -> str | None:
+    """Map NYT sync-style progress events to maintenance log lines."""
+    message = update.message.strip()
+    return message or None
 
 
 def _format_reclassify_change_line(change: NytReclassifyChange) -> str:
@@ -290,8 +297,10 @@ def render_recipe_maintenance() -> None:
                 progress_lines: list[str] = []
                 progress_bar = st.progress(0.0, text="NYT reclassify…")
 
-                def on_progress(message: str) -> None:
-                    progress_lines.append(message)
+                def on_progress(update: NytSyncProgressUpdate) -> None:
+                    line = _nyt_sync_progress_log_line(update)
+                    if line is not None:
+                        progress_lines.append(line)
 
                 with st.status("NYT reclassify", expanded=True) as status:
                     summary = reclassify_nyt_synced_recipes(
