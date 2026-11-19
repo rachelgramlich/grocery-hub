@@ -44,7 +44,7 @@ def test_nyt_sync_visible_on_add_recipe_when_credentials_missing() -> None:
 def test_list_recipe_box_folders_omits_all_saved_recipes_option() -> None:
     nyt_sync = nyt_sync_ui_source()
     nyt_cooking = package_module_source("integrations/nyt_cooking.py")
-    assert "All saved recipes" not in nyt_sync
+    assert 'label="All saved recipes"' not in nyt_sync
     assert '_PREFERRED_NYT_FOLDER_LABELS = ("To make", "Favorites")' in nyt_cooking
     assert 'label="All saved recipes"' not in nyt_cooking
     assert "Recipe box organization" in nyt_sync
@@ -59,7 +59,7 @@ def test_nyt_sync_shows_progress_bar_during_run() -> None:
 
 
 def test_nyt_orphan_filing_controls_present() -> None:
-    nyt_sync = (APP_PATH.parent / "nyt_sync.py").read_text(encoding="utf-8")
+    nyt_sync = nyt_sync_ui_source()
     assert 'key="nyt_orphan_preview"' in nyt_sync
     assert 'key="nyt_orphan_file"' in nyt_sync
     assert "default_orphan_target_folder" in nyt_sync

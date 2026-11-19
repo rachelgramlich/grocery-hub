@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
-from src.grocery_wizard.integrations.notion import ColumnInfo, DatabaseSchema
+from typing import TYPE_CHECKING
+
 from src.grocery_wizard.recipes.recipe_schema_columns import (
     dinner_lunch_category_na_option,
     is_dinner_lunch_category_column,
 )
+
+if TYPE_CHECKING:
+    from src.grocery_wizard.integrations.notion import ColumnInfo, DatabaseSchema
 
 METADATA_NA_LABELS = frozenset({"N/A", "NA"})
 

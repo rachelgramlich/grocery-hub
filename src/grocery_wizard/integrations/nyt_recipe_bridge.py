@@ -44,10 +44,18 @@ def is_weeknight_friendly(
     *,
     meal: str | None,
     total_minutes: float | None = None,
+    prep_minutes: float | None = None,
+    cook_minutes: float | None = None,
 ) -> bool:
     from src.grocery_wizard.recipes.weeknight import is_weeknight_friendly as _impl
 
-    return _impl(title, meal=meal, total_minutes=total_minutes)
+    return _impl(
+        title,
+        meal=meal,
+        total_minutes=total_minutes,
+        prep_minutes=prep_minutes,
+        cook_minutes=cook_minutes,
+    )
 
 
 def scrape_recipe_from_url(url: str) -> Any:
