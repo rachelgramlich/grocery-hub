@@ -338,11 +338,13 @@ def _classify_meal_structured(text: str, *, title_text: str) -> str | None:
     if SHEET_PAN_PATTERN.search(text):
         return "Dinner"
 
-    if _score_keywords(CLASSIFICATION_RULES["meal"]["Snack/Side"], text) > 0:
-        return "Snack/Side"
-
+    # Savory mains beat incidental Snack/Side keywords in ingredient lines
+    # (e.g. "focaccia, for serving" on Pasta Primavera).
     if SAVORY_MEAL_BLOCKERS.search(text):
         return "Dinner"
+
+    if _score_keywords(CLASSIFICATION_RULES["meal"]["Snack/Side"], text) > 0:
+        return "Snack/Side"
 
     if _score_keywords(CLASSIFICATION_RULES["meal"]["Dinner"], text) > 0:
         return "Dinner"

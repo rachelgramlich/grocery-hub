@@ -1451,15 +1451,17 @@ def reclassify_nyt_synced_recipes(
 
         summary.total += 1
         title = recipe.name
+        nyt_recipe = _fetch_reclassify_nyt_recipe(client, recipe, summary, on_progress=on_progress)
+        ingredient_lines = _reclassify_ingredient_lines(recipe)
+        if not ingredient_lines and nyt_recipe and nyt_recipe.ingredients:
+            ingredient_lines = list(nyt_recipe.ingredients)
         inferred = classify_recipe(
             title,
-            _reclassify_ingredient_lines(recipe),
+            ingredient_lines,
             filter_columns,
         )
         new_meal = inferred.get("Meal")
         old_meal = recipe.properties.get("Meal")
-
-        nyt_recipe = _fetch_reclassify_nyt_recipe(client, recipe, summary, on_progress=on_progress)
         total_minutes = nyt_recipe.total_time_minutes if nyt_recipe else None
         prep_minutes = nyt_recipe.prep_time_minutes if nyt_recipe else None
         cook_minutes = nyt_recipe.cook_time_minutes if nyt_recipe else None
@@ -1689,16 +1691,30 @@ def _ingredients_from_parts(parts: Any) -> list[str]:
     return lines
 
 
+_MINUTES_IN_DISPLAY = re.compile(r"(\d+(?:\.\d+)?)\s*(?:min(?:ute)?s?)?\b", re.IGNORECASE)
+
+
 def _parse_minutes(value: Any) -> float | None:
+    if isinstance(value, (int, float)):
+        return float(value)
     if not isinstance(value, dict):
         return None
     minutes = value.get("minutes")
-    if minutes is None:
-        return None
-    try:
-        return float(minutes)
-    except (TypeError, ValueError):
-        return None
+    if minutes is not None:
+        try:
+            return float(minutes)
+        except (TypeError, ValueError):
+            pass
+    for key in ("display", "label", "text"):
+        display = value.get(key)
+        if isinstance(display, str):
+            match = _MINUTES_IN_DISPLAY.search(display)
+            if match:
+                try:
+                    return float(match.group(1))
+                except ValueError:
+                    continue
+    return None
 
 
 def _parse_recipe_payload(payload: dict[str, Any]) -> NytRecipe:
