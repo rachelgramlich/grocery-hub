@@ -142,8 +142,11 @@ def persist_list_log_to_notion(
     page_id: str | None = None,
 ) -> tuple[str | None, str | None]:
     """Write or refresh the log in Notion. Returns ``(page_id, url)``; never raises."""
+    cfg = config or load_config()
+    if not cfg.notion_debug_logs_database_id:
+        return None, None
     try:
-        db = NotionListDebugLogsDB(config)
+        db = NotionListDebugLogsDB(cfg)
         if page_id:
             db.update_log(page_id, log)
             return page_id, notion_page_url(page_id)

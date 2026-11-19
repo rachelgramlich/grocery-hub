@@ -110,6 +110,16 @@ def test_save_log_creates_page(mock_db_cls: MagicMock) -> None:
     assert create_kwargs["Type"] == LIST_LOG_TYPE_VALUE
 
 
+def test_persist_list_log_skips_when_debug_logs_database_unconfigured() -> None:
+    config = MagicMock(notion_debug_logs_database_id=None)
+    page_id, url = persist_list_log_to_notion(
+        {"created_at": "2026-10-30T12:00:00+00:00"},
+        config=config,
+    )
+    assert page_id is None
+    assert url is None
+
+
 @patch("src.grocery_wizard.integrations.notion_list_logs.NotionListDebugLogsDB")
 def test_persist_list_log_swallows_errors(mock_db_cls: MagicMock) -> None:
     mock_db_cls.side_effect = RuntimeError("network")

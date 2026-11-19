@@ -76,7 +76,8 @@ class Config(BaseSettings):
     notion_weekly_meal_plans_database_id: str = Field(
         validation_alias="NOTION_WEEKLY_MEAL_PLANS_DATABASE_ID",
     )
-    notion_debug_logs_database_id: str = Field(
+    notion_debug_logs_database_id: str | None = Field(
+        default=None,
         validation_alias=AliasChoices(
             "NOTION_DEBUG_LOGS_DATABASE_ID",
             "NOTION_LIST_DEBUG_LOGS_DATABASE_ID",
@@ -208,13 +209,9 @@ class Config(BaseSettings):
 
     @field_validator("notion_debug_logs_database_id")
     @classmethod
-    def _require_debug_logs_database_id(cls, value: str | None) -> str:
+    def _normalize_debug_logs_database_id(cls, value: str | None) -> str | None:
         if not value:
-            raise ValueError(
-                "NOTION_DEBUG_LOGS_DATABASE_ID is required "
-                "(legacy alias NOTION_LIST_DEBUG_LOGS_DATABASE_ID; "
-                "set in .env or Cloud Agent Secrets)"
-            )
+            return None
         return normalize_notion_database_id(value)
 
 
@@ -364,11 +361,5 @@ def load_config() -> Config:
                 raise ValueError(
                     "NOTION_WEEKLY_MEAL_PLANS_DATABASE_ID is required "
                     "(set in .env or Cloud Agent Secrets)"
-                ) from exc
-            if "notion_debug_logs_database_id" in loc:
-                raise ValueError(
-                    "NOTION_DEBUG_LOGS_DATABASE_ID is required "
-                    "(legacy alias NOTION_LIST_DEBUG_LOGS_DATABASE_ID; "
-                    "set in .env or Cloud Agent Secrets)"
                 ) from exc
         raise ValueError(_format_config_validation_error(exc)) from exc
