@@ -180,6 +180,20 @@ def test_find_collection_by_name_case_insensitive(credentials: NytCredentials) -
     assert found.id == "10"
 
 
+def test_save_recipe_and_add_to_collection(credentials: NytCredentials) -> None:
+    session = MagicMock()
+    client = NYTCookingClient(credentials, session=session)
+    session.post.side_effect = [
+        _mock_response(status_code=201, payload={"id": 1019049}),
+        _mock_response(status_code=201, payload={"id": 999}),
+    ]
+
+    save_status, folder_status = client.save_recipe_to_collection("42", "1019049")
+    assert save_status == 201
+    assert folder_status == 201
+    assert session.post.call_count == 2
+
+
 def test_get_recipe(credentials: NytCredentials) -> None:
     session = MagicMock()
     client = NYTCookingClient(credentials, session=session)

@@ -64,6 +64,10 @@ After sync, the app shows a **Metadata review** expander. The last sync report i
 
 **Weeknight friendly** is set automatically when you add any recipe (NYT sync or the Streamlit UI). For **Dinner** recipes it is checked when total cook time is under 60 minutes (from the scraper's JSON-LD data or NYT API) or the title suggests a quick/easy dish (weeknight, one-pot, sheet pan, stir fry, etc.). You do not need to set the checkbox manually during review.
 
+#### Recipe box write API (maintenance / scripts)
+
+`NYTCookingClient` can **save**, **unsave**, and **manage folders** on NYT (same cookies). The Streamlit app does not call these yet; they power reliable paging for sync and optional automation. Details: [`docs/operations/nyt-recipe-box-api.md`](../../docs/operations/nyt-recipe-box-api.md).
+
 ## Project layout
 
 Grocery Wizard is a package under `src/grocery_wizard/`. Folders group code by **what it does**; tests mirror the same folders under `tests/src/grocery_wizard/`.
