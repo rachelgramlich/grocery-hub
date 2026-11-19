@@ -1329,7 +1329,7 @@ def _build_reclassify_field_updates(
     title = recipe.name
     fields: dict[str, Any] = {}
 
-    if new_meal and new_meal != old_meal:
+    if new_meal and normalize_meal_values(new_meal) != normalize_meal_values(old_meal):
         fields["Meal"] = new_meal
         summary.meal_changes += 1
         summary.changes.append(
