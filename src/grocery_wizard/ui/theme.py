@@ -498,11 +498,3 @@ def app_theme_css(tokens: ThemeTokens = GW_THEME) -> str:
         }}
         </style>
         """
-
-
-def app_external_links_script() -> str:
-    """Return ``<script>`` that opens app hyperlinks in a new tab (idempotent)."""
-    if EXTERNAL_LINKS_JS.is_file():
-        js = EXTERNAL_LINKS_JS.read_text(encoding="utf-8")
-        return f"<script>\n{js}\n</script>"
-    return ""
