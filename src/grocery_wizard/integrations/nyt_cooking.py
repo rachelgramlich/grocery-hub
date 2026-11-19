@@ -1293,7 +1293,6 @@ def _fetch_reclassify_total_minutes(
     *,
     on_progress: NytSyncProgressCallback | None,
 ) -> float | None:
-    title = recipe.name
     recipe_id = _recipe_id_from_url(recipe.link or "")
     if not recipe_id:
         return None
@@ -1301,7 +1300,12 @@ def _fetch_reclassify_total_minutes(
         nyt_recipe = client.get_recipe(recipe_id)
     except NYTCookingError:
         summary.api_failures += 1
-        _notify_sync_progress(on_progress, f"Could not fetch NYT timing for: {title}")
+        from src.grocery_wizard.recipes.recipe_maintenance import format_recipe_progress_line
+
+        _notify_sync_progress(
+            on_progress,
+            format_recipe_progress_line("Could not fetch NYT timing for: ", recipe),
+        )
         return None
     else:
         return nyt_recipe.total_time_minutes
@@ -1407,10 +1411,12 @@ def _apply_reclassify_recipe_updates(
     on_progress: NytSyncProgressCallback | None,
 ) -> None:
     if fields:
+        from src.grocery_wizard.recipes.recipe_maintenance import format_recipe_progress_line
+
         detail = ", ".join(f"{key}={value}" for key, value in fields.items())
         _notify_sync_progress(
             on_progress,
-            f"Update: {recipe.name} ({detail})",
+            format_recipe_progress_line("Update: ", recipe, suffix=f" ({detail})"),
             processed=summary.total,
         )
         if not dry_run:
