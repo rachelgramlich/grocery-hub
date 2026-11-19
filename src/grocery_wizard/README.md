@@ -66,7 +66,7 @@ After sync, the app shows a **Metadata review** expander. The last sync report i
 
 #### Recipe box write API (maintenance / scripts)
 
-`NYTCookingClient` can **save**, **unsave**, and **manage folders** on NYT (same cookies). The Streamlit app does not call these yet; they power reliable paging for sync and optional automation. Details: [`docs/operations/nyt-recipe-box-api.md`](../../docs/operations/nyt-recipe-box-api.md).
+`NYTCookingClient` can **save**, **unsave**, and **manage folders** on NYT (same cookies). The Streamlit NYT sync section can **file unfiled recipes** into a folder (default `1 to make`). Details: [`docs/operations/nyt-recipe-box-api.md`](../../docs/operations/nyt-recipe-box-api.md).
 
 ## Project layout
 
