@@ -318,7 +318,10 @@ def test_pick_weight_penalizes_recent_recipes() -> None:
     recent = {"Chicken Curry"}
     chicken = DIVERSITY_RECIPES[0]
     fish = DIVERSITY_RECIPES[1]
-    assert _pick_weight(chicken, [], recent) < _pick_weight(fish, [], recent)
+    columns = ("Protein", "Dinner Category", "Cuisine")
+    assert _pick_weight(chicken, [], recent, diversity_columns=columns) < _pick_weight(
+        fish, [], recent, diversity_columns=columns
+    )
 
 
 def test_replace_meals_in_plan_swaps_selected_slots(monkeypatch) -> None:

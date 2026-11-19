@@ -29,7 +29,7 @@ Match production **property names** (see [`src/grocery_wizard/config/README.md`]
 
 | Database | Required properties |
 | --- | --- |
-| **`[GW CI] Recipes`** | **Name** (title), **Link** (url), **Ingredients** (text). Other recipe columns are optional but help UI smoke tests. |
+| **`[GW CI] Recipes`** | **Name** (title), **Link** (url), **Ingredients** (text). **Dinner/Lunch Category** multi_select must include **N/A**; **Cuisine** and **Tags** should include **N/A**; **Protein** should include **None**. Other columns help UI smoke tests. |
 | **`[GW CI] Pantry Staples`** | **Name**, **Store Aisle** (select — labels from `store_aisles.txt`; run `just sync-pantry-aisles` after copying prod or creating a sparse CI pantry). |
 | **`[GW CI] Recurring Weekly Items`** | **Name** only. |
 | **`[GW CI] Weekly Meal Plans`** | **Name**, **Week start** (date), **Recipes** (relation → **`[GW CI] Recipes`**). Plan **Name** format: `YYYY-MM-DD_plan` (e.g. `2026-09-13_plan`). |

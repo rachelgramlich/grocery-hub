@@ -26,6 +26,7 @@ from src.grocery_wizard.integrations.notion_household import (
     resolve_pantry_aisle_column,
 )
 from src.grocery_wizard.integrations.notion_table import NotionDatabase
+from src.grocery_wizard.recipes.recipe_metadata_na import collect_recipes_na_option_errors
 
 CI_RECIPES_LABEL = "[GW CI] Recipes"
 CI_PANTRY_LABEL = "[GW CI] Pantry Staples"
@@ -101,6 +102,7 @@ def collect_recipes_schema_errors(
                 expected_types=("rich_text", "text"),
             )
         )
+    errors.extend(collect_recipes_na_option_errors(schema, database_label=database_label))
     return errors
 
 

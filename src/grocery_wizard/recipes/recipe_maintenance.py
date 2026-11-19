@@ -14,9 +14,10 @@ from src.grocery_wizard.integrations.notion import (
     NotionFieldValues,
     NotionRecipesDB,
     Recipe,
+    notion_page_url,
 )
 from src.grocery_wizard.recipes.add_recipe import _weeknight_column_name
-from src.grocery_wizard.recipes.classify import classify_recipe
+from src.grocery_wizard.recipes.classify import MEALS_WITHOUT_DINNER_CATEGORY, classify_recipe
 from src.grocery_wizard.recipes.recipe_image_attach import attach_recipe_cover_image
 from src.grocery_wizard.recipes.recipe_image_resolver import (
     ImageResolveError,
@@ -26,6 +27,16 @@ from src.grocery_wizard.recipes.recipe_images import recipe_has_cover_image
 from src.grocery_wizard.recipes.recipe_meal_plan_stats import (
     filter_columns_for_recipe_classify,
     is_meal_plan_tracking_column,
+)
+from src.grocery_wizard.recipes.recipe_metadata_na import (
+    PROTEIN_LEGACY_NONE_LABEL,
+    protein_column_name,
+    protein_na_option,
+)
+from src.grocery_wizard.recipes.recipe_schema_columns import (
+    dinner_lunch_category_na_option,
+    is_dinner_lunch_category_column,
+    is_dinner_lunch_category_na_only,
 )
 from src.grocery_wizard.recipes.scraper import ScrapeError, ingredients_to_text, scrape_recipe
 from src.grocery_wizard.recipes.weeknight import is_weeknight_friendly
@@ -45,6 +56,15 @@ class BackfillSummary:
     failed: int = 0
     skipped: int = 0
     messages: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class CommonMetadataRepairSummary:
+    """Result of strip + metadata backfill (rule-based repair, not blind overwrite)."""
+
+    strip: BackfillSummary | None = None
+    protein_none_to_na: BackfillSummary | None = None
+    backfill: BackfillSummary | None = None
 
 
 def recipe_has_link(recipe: Recipe) -> bool:
@@ -139,8 +159,8 @@ def metadata_filter_columns_for_meals(
         elif key == "protein":
             if unknown_meal or meals & _LUNCH_DINNER_MEALS:
                 columns.append(col)
-        elif key == "dinner category":
-            if unknown_meal or "Dinner" in meals:
+        elif is_dinner_lunch_category_column(col.name):
+            if unknown_meal or meals & _LUNCH_DINNER_MEALS or meals & MEALS_WITHOUT_DINNER_CATEGORY:
                 columns.append(col)
         elif key == "tags":
             if unknown_meal or meals != {"Drink"}:
@@ -217,6 +237,78 @@ def recipes_missing_metadata(recipes: list[Recipe], schema: DatabaseSchema) -> l
     return [recipe for recipe in recipes if recipe_missing_metadata(recipe, schema)]
 
 
+def dinner_category_column_name(schema: DatabaseSchema) -> str | None:
+    from src.grocery_wizard.recipes.recipe_schema_columns import (
+        dinner_lunch_category_column_from_schema,
+    )
+
+    return dinner_lunch_category_column_from_schema(schema)
+
+
+def dinner_lunch_category_na_label(schema: DatabaseSchema) -> str | None:
+    column = dinner_category_column_name(schema)
+    if not column:
+        return None
+    col = schema.all_columns.get(column)
+    if not col:
+        return None
+    return dinner_lunch_category_na_option(col.options)
+
+
+def recipe_has_invalid_dinner_category(recipe: Recipe, schema: DatabaseSchema) -> bool:
+    """Dessert/drink/breakfast rows whose Dinner/Lunch Category is empty or not **N/A**."""
+    column = dinner_category_column_name(schema)
+    na_label = dinner_lunch_category_na_label(schema)
+    if not column or not na_label:
+        return False
+    meals = meal_values_on_recipe(recipe, schema)
+    if not meals or not meals & MEALS_WITHOUT_DINNER_CATEGORY:
+        return False
+    current = recipe.properties.get(column)
+    if is_blank_metadata_value("multi_select", current):
+        return True
+    return not is_dinner_lunch_category_na_only(current, na_label=na_label)
+
+
+def recipes_invalid_dinner_category(
+    recipes: list[Recipe],
+    schema: DatabaseSchema,
+) -> list[Recipe]:
+    return [recipe for recipe in recipes if recipe_has_invalid_dinner_category(recipe, schema)]
+
+
+def run_strip_invalid_dinner_categories(
+    db: NotionRecipesDB,
+    candidates: list[Recipe],
+    *,
+    on_progress: ProgressCallback | None = None,
+    on_fraction: FractionCallback | None = None,
+) -> BackfillSummary:
+    """Set Dinner/Lunch Category to N/A for dessert, drink, or breakfast."""
+    column = dinner_category_column_name(db.schema)
+    na_label = dinner_lunch_category_na_label(db.schema)
+    summary = BackfillSummary(scanned=len(candidates))
+    if not column or not na_label:
+        summary.skipped = len(candidates)
+        return summary
+
+    total = len(candidates)
+    for index, recipe in enumerate(candidates, start=1):
+        if on_fraction and total:
+            on_fraction(index / total)
+        if not recipe_has_invalid_dinner_category(recipe, db.schema):
+            summary.skipped += 1
+            continue
+        db.update_recipe(recipe.page_id, {column: [na_label]})
+        summary.succeeded += 1
+        if on_progress:
+            on_progress(f"Set Dinner/Lunch Category to N/A: {recipe.name}")
+
+    if on_fraction:
+        on_fraction(1.0)
+    return summary
+
+
 def _ingredient_lines(recipe: Recipe) -> list[str]:
     return [line.strip() for line in ingredients_text(recipe).splitlines() if line.strip()]
 
@@ -228,6 +320,7 @@ def _blank_metadata_updates(
     *,
     eligible_names: set[str],
 ) -> NotionFieldValues:
+    """Only write inferred values into empty cells; never replace existing non-blank tags."""
     updates: NotionFieldValues = {}
     columns_by_name = {col.name: col for col in [*schema.filter_columns, *schema.checkbox_columns]}
     for name in eligible_names:
@@ -312,6 +405,163 @@ def format_backfill_summary(label: str, summary: BackfillSummary) -> str:
     )
 
 
+def format_common_metadata_repair_summary(summary: CommonMetadataRepairSummary) -> str:
+    parts: list[str] = []
+    if summary.strip is not None:
+        parts.append(format_backfill_summary("Strip invalid categories", summary.strip))
+    if summary.protein_none_to_na is not None:
+        parts.append(format_backfill_summary("Protein None → N/A", summary.protein_none_to_na))
+    if summary.backfill is not None:
+        parts.append(format_backfill_summary("Metadata backfill", summary.backfill))
+    return " · ".join(parts) if parts else "No repair steps ran"
+
+
+def recipe_has_legacy_protein_none(recipe: Recipe, schema: DatabaseSchema) -> bool:
+    """Protein is **None** but the schema also offers **N/A** (should normalize)."""
+    column = protein_column_name(schema)
+    col = schema.all_columns.get(column) if column else None
+    if not column or col is None:
+        return False
+    na_label = protein_na_option(col.options)
+    if not na_label or na_label == PROTEIN_LEGACY_NONE_LABEL:
+        return False
+    current = recipe.properties.get(column)
+    if not isinstance(current, list) or not current:
+        return False
+    items = [str(item).strip() for item in current if str(item).strip()]
+    return PROTEIN_LEGACY_NONE_LABEL in items and na_label not in items
+
+
+def recipes_legacy_protein_none(recipes: list[Recipe], schema: DatabaseSchema) -> list[Recipe]:
+    return [recipe for recipe in recipes if recipe_has_legacy_protein_none(recipe, schema)]
+
+
+def run_normalize_protein_none_to_na(
+    db: NotionRecipesDB,
+    candidates: list[Recipe],
+    *,
+    on_progress: ProgressCallback | None = None,
+    on_fraction: FractionCallback | None = None,
+) -> BackfillSummary:
+    column = protein_column_name(db.schema)
+    col = db.schema.all_columns.get(column) if column else None
+    na_label = protein_na_option(col.options) if col else None
+    summary = BackfillSummary(scanned=len(candidates))
+    if not column or not col or not na_label or na_label == PROTEIN_LEGACY_NONE_LABEL:
+        summary.skipped = len(candidates)
+        return summary
+
+    total = len(candidates)
+    for index, recipe in enumerate(candidates, start=1):
+        if on_fraction and total:
+            on_fraction(index / total)
+        if not recipe_has_legacy_protein_none(recipe, db.schema):
+            summary.skipped += 1
+            continue
+        current = recipe.properties.get(column)
+        assert isinstance(current, list)
+        updated = [
+            na_label if str(item).strip() == PROTEIN_LEGACY_NONE_LABEL else str(item).strip()
+            for item in current
+            if str(item).strip()
+        ]
+        db.update_recipe(recipe.page_id, {column: updated})
+        summary.succeeded += 1
+        if on_progress:
+            on_progress(f"Protein None → N/A: {recipe.name}")
+
+    if on_fraction:
+        on_fraction(1.0)
+    return summary
+
+
+def run_common_metadata_repair(
+    db: NotionRecipesDB,
+    recipes: list[Recipe],
+    *,
+    nyt_client: Any | None = None,
+    do_strip: bool = True,
+    do_protein_normalize: bool = True,
+    do_backfill: bool = True,
+    on_progress: ProgressCallback | None = None,
+    on_fraction: FractionCallback | None = None,
+) -> CommonMetadataRepairSummary:
+    """Strip rule-invalid dinner/lunch tags, normalize Protein, then backfill metadata."""
+    result = CommonMetadataRepairSummary()
+    steps = [do_strip, do_protein_normalize, do_backfill]
+    step_index = 0
+
+    def _step_fraction(inner: float, *, active: bool) -> None:
+        if not on_fraction or not any(steps):
+            return
+        total_steps = sum(1 for flag in steps if flag)
+        base = step_index / total_steps
+        on_fraction(base + (inner / total_steps if active else 0.0))
+
+    if do_strip:
+        invalid = recipes_invalid_dinner_category(recipes, db.schema)
+        if on_progress:
+            on_progress(f"Strip: {len(invalid)} recipe(s) with invalid dinner/lunch category")
+        result.strip = run_strip_invalid_dinner_categories(
+            db,
+            invalid,
+            on_progress=on_progress,
+            on_fraction=lambda f: _step_fraction(f, active=True),
+        )
+        step_index += 1
+        _step_fraction(1.0, active=False)
+
+    if do_protein_normalize:
+        legacy_protein = recipes_legacy_protein_none(recipes, db.schema)
+        if on_progress:
+            on_progress(f"Protein: {len(legacy_protein)} recipe(s) with legacy None")
+        result.protein_none_to_na = run_normalize_protein_none_to_na(
+            db,
+            legacy_protein,
+            on_progress=on_progress,
+            on_fraction=lambda f: _step_fraction(f, active=True),
+        )
+        step_index += 1
+        _step_fraction(1.0, active=False)
+
+    if do_backfill:
+        missing = recipes_missing_metadata(recipes, db.schema)
+        if on_progress:
+            on_progress(f"Backfill: {len(missing)} recipe(s) with empty metadata")
+        result.backfill = run_metadata_backfill(
+            db,
+            missing,
+            nyt_client=nyt_client,
+            on_progress=on_progress,
+            on_fraction=lambda f: _step_fraction(f, active=True),
+        )
+        step_index += 1
+        _step_fraction(1.0, active=False)
+
+    if on_fraction:
+        on_fraction(1.0)
+    return result
+
+
+def _markdown_link_label(text: str) -> str:
+    """Escape brackets so recipe titles are safe inside Markdown link text."""
+    return text.replace("\\", "\\\\").replace("[", "\\[").replace("]", "\\]")
+
+
+def recipe_notion_markdown_link(recipe: Recipe) -> str:
+    """Recipe name as a Markdown link to its Notion page, or plain text when no page id."""
+    page_id = (recipe.page_id or "").strip()
+    label = _markdown_link_label(recipe.name)
+    if not page_id:
+        return label
+    return f"[{label}]({notion_page_url(page_id)})"
+
+
+def format_backfill_failed_line(recipe: Recipe, reason: str) -> str:
+    """Progress line for a failed recipe row (includes a Notion link when possible)."""
+    return f"Failed: {recipe_notion_markdown_link(recipe)} — {reason}"
+
+
 def run_ingredients_backfill(
     db: NotionRecipesDB,
     candidates: list[Recipe],
@@ -345,7 +595,7 @@ def run_ingredients_backfill(
         except ScrapeError as exc:
             summary.failed += 1
             if on_progress:
-                on_progress(f"Failed: {recipe.name} — {exc}")
+                on_progress(format_backfill_failed_line(recipe, str(exc)))
             continue
 
         if not scraped.ingredients:
@@ -401,7 +651,7 @@ def run_metadata_backfill(
         except Exception as exc:
             summary.failed += 1
             if on_progress:
-                on_progress(f"Failed: {recipe.name} — {exc}")
+                on_progress(format_backfill_failed_line(recipe, str(exc)))
             continue
 
         if not updates:
@@ -463,7 +713,7 @@ def run_image_backfill(
         except ImageResolveError as exc:
             summary.failed += 1
             if on_progress:
-                on_progress(f"Failed: {recipe.name} — {exc}")
+                on_progress(format_backfill_failed_line(recipe, str(exc)))
             continue
 
         if dry_run:
@@ -480,7 +730,7 @@ def run_image_backfill(
         except Exception as exc:
             summary.failed += 1
             if on_progress:
-                on_progress(f"Failed: {recipe.name} — {exc}")
+                on_progress(format_backfill_failed_line(recipe, str(exc)))
             continue
         if result.ok:
             summary.succeeded += 1
@@ -489,7 +739,12 @@ def run_image_backfill(
         else:
             summary.failed += 1
             if on_progress:
-                on_progress(f"Failed: {recipe.name} — {result.error or 'upload failed'}")
+                on_progress(
+                    format_backfill_failed_line(
+                        recipe,
+                        result.error or "upload failed",
+                    )
+                )
 
     if on_fraction:
         on_fraction(1.0)
