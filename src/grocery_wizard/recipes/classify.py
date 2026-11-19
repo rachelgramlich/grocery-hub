@@ -155,7 +155,7 @@ SAVORY_MEAL_BLOCKERS = re.compile(
     r"beans|pasta|soup|stew|noodles|burrito|enchilada|lasagna|curry|"
     r"couscous|flatbread|fritters|meatball|satay|bibimbap|kimbap|adobo|ratatouille|"
     r"scallop|salmon|shrimp|halloumi|skewer|dumpling|tomato tart|potpie|"
-    r"paneer|tikka|aloo|gobi|orzo|fried rice|spaghetti squash"
+    r"paneer|tikka|aloo|gobi|orzo|fried rice|spaghetti squash|primavera"
     r")\b",
     re.IGNORECASE,
 )
@@ -203,7 +203,8 @@ def classify_column(
     rules = CLASSIFICATION_RULES.get(classification_rules_key(column_name), {})
 
     if column_name.lower() == "meal":
-        return _classify_meal(text, rules, allowed_options)
+        title_text = _normalize_text(title, ())
+        return _classify_meal(text, rules, allowed_options, title_text=title_text)
 
     best_option: str | None = None
     best_score = 0
@@ -278,7 +279,7 @@ def classify_recipe(
     if weeknight_column:
         results[weeknight_column] = is_weeknight_friendly(
             title,
-            meal=meal if isinstance(meal, str) else None,
+            meal=meal,
             total_minutes=total_minutes,
         )
 
@@ -289,8 +290,10 @@ def _classify_meal(
     text: str,
     rules: dict[str, list[str]],
     allowed_options: list[str] | None,
+    *,
+    title_text: str,
 ) -> str | None:
-    structured = _classify_meal_structured(text)
+    structured = _classify_meal_structured(text, title_text=title_text)
     if structured is not None:
         return _resolve_meal_option(structured, allowed_options)
 
@@ -316,7 +319,7 @@ def _classify_meal(
     return None
 
 
-def _classify_meal_structured(text: str) -> str | None:
+def _classify_meal_structured(text: str, *, title_text: str) -> str | None:
     """Rule-based meal classification with explicit priority."""
     if _is_dessert(text):
         return "Dessert"
@@ -327,17 +330,21 @@ def _classify_meal_structured(text: str) -> str | None:
     if SANDWICH_PATTERN.search(text):
         return "Lunch"
 
-    if SALAD_PATTERN.search(text):
+    # Salad-as-meal applies to the recipe title only — ingredient lines like
+    # "salad greens" must not reclassify pasta mains as Snack/Side.
+    if SALAD_PATTERN.search(title_text):
         return "Snack/Side"
 
     if SHEET_PAN_PATTERN.search(text):
         return "Dinner"
 
-    if _score_keywords(CLASSIFICATION_RULES["meal"]["Snack/Side"], text) > 0:
-        return "Snack/Side"
-
+    # Savory mains beat incidental Snack/Side keywords in ingredient lines
+    # (e.g. "focaccia, for serving" on Pasta Primavera).
     if SAVORY_MEAL_BLOCKERS.search(text):
         return "Dinner"
+
+    if _score_keywords(CLASSIFICATION_RULES["meal"]["Snack/Side"], text) > 0:
+        return "Snack/Side"
 
     if _score_keywords(CLASSIFICATION_RULES["meal"]["Dinner"], text) > 0:
         return "Dinner"

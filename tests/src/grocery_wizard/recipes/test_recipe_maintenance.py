@@ -9,6 +9,7 @@ from src.grocery_wizard.recipes.recipe_maintenance import (
     BackfillSummary,
     _resolve_total_minutes,
     format_backfill_failed_line,
+    format_recipe_progress_line,
     infer_metadata_field_values,
     is_blank_metadata_value,
     recipe_has_cover_image,
@@ -236,8 +237,17 @@ def test_run_ingredients_backfill_counts_scrape_errors() -> None:
     assert summary.failed == 1
     db.update_recipe.assert_not_called()
     assert len(lines) == 2
+    assert lines[0] == format_recipe_progress_line("Scraping ingredients: ", candidate)
+    assert "notion.so/page1" in lines[0]
     assert lines[1] == format_backfill_failed_line(candidate, "blocked")
     assert "notion.so/page1" in lines[1]
+
+
+def test_format_recipe_progress_line_skipped_uses_notion_link() -> None:
+    recipe = _recipe(ingredients="")
+    line = format_recipe_progress_line("Skipped (no ingredients on page): ", recipe)
+    assert line.startswith("Skipped (no ingredients on page): [Chicken Pasta]")
+    assert "notion.so/page1" in line
 
 
 def test_recipe_notion_markdown_link_escapes_brackets() -> None:
