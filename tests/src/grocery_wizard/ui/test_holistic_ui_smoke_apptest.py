@@ -27,6 +27,7 @@ from src.grocery_wizard.ui.views import (
     PAGE_LABEL_PANTRY,
     PAGE_LABEL_WEEKLY,
 )
+from tests.notion_get_db_patch_targets import patch_ui_get_db
 from tests.notion_test_env import live_notion_smoke_enabled
 
 pytestmark = pytest.mark.holistic_ui_smoke
@@ -233,18 +234,7 @@ def test_holistic_dev_jump_builds_golden_grocery_list(monkeypatch: pytest.Monkey
     fake_db.schema.all_columns = {}
     fake_db.query_recipes.return_value = golden_recipes
 
-    get_db_targets = (
-        "src.grocery_wizard.ui.db_access",
-        "src.grocery_wizard.ui.app",
-        "src.grocery_wizard.ui.nyt_sync",
-        "src.grocery_wizard.ui.views.add_recipe",
-        "src.grocery_wizard.ui.views.weekly_plan.flow",
-        "src.grocery_wizard.ui.views.weekly_plan.plan_entry",
-        "src.grocery_wizard.ui.views.weekly_plan.grocery_list_ui",
-        "src.grocery_wizard.ui.views.weekly_plan.state",
-    )
-    for module_path in get_db_targets:
-        monkeypatch.setattr(f"{module_path}.get_db", lambda _db=fake_db: _db, raising=False)
+    patch_ui_get_db(monkeypatch, lambda _db=fake_db: _db)
 
     pantry_names = {
         str(item).strip().lower() for item in week.get("pantry", []) if str(item).strip()
