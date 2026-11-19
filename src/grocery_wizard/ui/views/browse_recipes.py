@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import hashlib
+from typing import TYPE_CHECKING
 
 import streamlit as st
 
-from src.grocery_wizard.integrations.notion import NotionRecipesDB, Recipe
 from src.grocery_wizard.planning.meal_planner import build_ingredient_index
 from src.grocery_wizard.recipes.recipe_meal_plan_stats import meal_plan_status_column_name
 from src.grocery_wizard.ui.browse_logic import (
+    BROWSE_EMPTY_FILTER_HTML,
     BROWSE_FILTER_KEY_PREFIX,
     BROWSE_PAGE_SIZE,
     BrowseAppliedFilters,
@@ -51,6 +52,9 @@ from src.grocery_wizard.ui.weekly_plan_add import (
     WeeklyPlanAddOutcome,
     add_recipe_to_week_from_browse,
 )
+
+if TYPE_CHECKING:
+    from src.grocery_wizard.integrations.notion import NotionRecipesDB, Recipe
 
 _BROWSE_GRID_COLUMNS = 4
 _BROWSE_RECIPES_WARM_KEY = "_browse_recipes_warm_generation"
@@ -111,10 +115,7 @@ def _render_browse_grid(
 ) -> None:
     visible = display_recipes[:limit]
     if not visible:
-        st.markdown(
-            '<p class="gw-browse-empty">No recipes match these filters.</p>',
-            unsafe_allow_html=True,
-        )
+        st.markdown(BROWSE_EMPTY_FILTER_HTML, unsafe_allow_html=True)
         return
 
     schema = get_db().schema
@@ -226,7 +227,7 @@ def render_browse_recipes() -> None:
                 has_image=has_image_draft,
                 include_paused=include_paused_draft,
                 include_deprecated=include_deprecated_draft,
-            )
+            ),
         )
         st.session_state[browse_session_sort_seed_key()] = new_browse_sort_seed()
         st.session_state[browse_session_visible_count_key()] = BROWSE_PAGE_SIZE

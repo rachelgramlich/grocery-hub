@@ -8,10 +8,12 @@ from typing import Any
 
 from streamlit.testing.v1 import AppTest
 
+from src.grocery_wizard.paths import UI_APP_PATH
+from src.grocery_wizard.ui.db_access import get_db
 from src.grocery_wizard.ui.ids import CONTROL_GLOBAL_PAGE_PICKER, control_streamlit_key
 from src.grocery_wizard.ui.views import page_label_for_slug
 
-APP_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "ui", "app.py")
+APP_PATH = UI_APP_PATH
 _PAGE_PICKER_KEY = control_streamlit_key(CONTROL_GLOBAL_PAGE_PICKER)
 _RENDER_SLUG_KEY = "gw_render_page_slug"
 
@@ -30,7 +32,7 @@ class AuditContext:
 
 def new_app(ctx: AuditContext) -> AppTest:
     os.environ.setdefault("GROCERY_WIZARD_DEV_UI", "1")
-    return AppTest.from_file(os.path.abspath(APP_PATH), default_timeout=ctx.timeout)
+    return AppTest.from_file(str(APP_PATH), default_timeout=ctx.timeout)
 
 
 def open_app(ctx: AuditContext) -> AppTest:
@@ -74,7 +76,11 @@ def button_with_prefix(at: AppTest, prefix: str) -> Any:
 
 
 def click(
-    ctx: AuditContext, at: AppTest, *, key: str | None = None, label: str | None = None
+    ctx: AuditContext,
+    at: AppTest,
+    *,
+    key: str | None = None,
+    label: str | None = None,
 ) -> AppTest:
     return button(at, key=key, label=label).click().run(timeout=ctx.timeout)
 
@@ -133,8 +139,6 @@ def dev_meals_ready_for_grocery(ctx: AuditContext) -> AppTest:
 def first_recipe_link(ctx: AuditContext) -> str:
     """A recipe URL already in Notion, so the Add-recipe duplicate path is read-only."""
     if "recipe_link" not in ctx.facts:
-        from src.grocery_wizard.ui.db_access import get_db
-
         recipes = get_db().query_recipes()
         link = next((r.link for r in recipes if r.link), None)
         ctx.facts["recipe_link"] = link

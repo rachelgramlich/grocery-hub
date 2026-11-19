@@ -13,12 +13,13 @@ import argparse
 import csv
 import re
 import sys
-from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
+from typing import TYPE_CHECKING
 
+from src.grocery_wizard.config import load_config
 from src.grocery_wizard.ingredients.parsed import (
     _is_citrus_zest_or_juice_only_line,
     format_ingredient_for_storage,
@@ -31,12 +32,16 @@ from src.grocery_wizard.ingredients.sync import (
     prepare_ingredients_for_notion,
 )
 from src.grocery_wizard.integrations.notion import DatabaseSchema, NotionRecipesDB, Recipe
+from src.grocery_wizard.integrations.notion_io_errors import NOTION_BOUNDARY_ERRORS
 from src.grocery_wizard.recipes.recipe_maintenance import (
     FractionCallback,
     ProgressCallback,
     ingredients_text,
     recipe_has_link,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 
 class ReformatStatus(StrEnum):
@@ -264,7 +269,8 @@ def analyze_stored_ingredient_reformat(before_text: str) -> ReformatAnalysis:
     reasons: list[str] = []
 
     if len(after_ing) < len(before_ing) and not _line_count_drop_is_accounted(
-        before_ing, after_ing
+        before_ing,
+        after_ing,
     ):
         reasons.append(
             f"ingredient line count dropped {len(before_ing)} → {len(after_ing)}",
@@ -471,7 +477,7 @@ def run_stored_ingredients_reformat(
                 summary.updated += 1
                 if on_progress:
                     on_progress(f"Updated: {recipe.name}")
-            except Exception as exc:
+            except NOTION_BOUNDARY_ERRORS as exc:
                 summary.failed += 1
                 if on_progress:
                     on_progress(f"Failed: {recipe.name} — {exc}")
@@ -528,8 +534,6 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    from src.grocery_wizard.config import load_config
-
     args = _parse_args(argv)
     cfg = load_config()
     db = NotionRecipesDB(cfg)

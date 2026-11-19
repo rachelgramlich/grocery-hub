@@ -167,7 +167,7 @@ def _try_split_on_conjunction(text: str) -> tuple[str, str] | None:
 
 
 _COLOR_ADJECTIVES = frozenset(
-    {"red", "yellow", "green", "white", "black", "orange", "purple", "golden"}
+    {"red", "yellow", "green", "white", "black", "orange", "purple", "golden"},
 )
 
 
@@ -289,13 +289,15 @@ def _is_junk_only(text: str) -> bool:
 
 
 def _prepare_line_for_parsing(line: str) -> str:
-    from src.grocery_wizard.ingredients.parsed import (
-        _normalize_unicode,
+    from src.grocery_wizard.ingredients.ingredient_unicode import _normalize_unicode
+    from src.grocery_wizard.ingredients.line_strips import (
         _strip_leading_to_prefix,
         _strip_optional_prefix,
         _strip_or_prefix,
     )
 
     return _strip_leading_to_prefix(
-        _strip_or_prefix(_strip_optional_prefix(_normalize_unicode(line.strip()).lstrip("-–—− \t")))  # noqa: RUF001
+        _strip_or_prefix(
+            _strip_optional_prefix(_normalize_unicode(line.strip()).lstrip("-–—− \t")),  # noqa: RUF001
+        ),
     )

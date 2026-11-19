@@ -8,15 +8,15 @@ pick up the same tokens when they reuse those primitives.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Final
+
+from src.grocery_wizard.paths import UI_STATIC_DIR
 
 # WCAG 2.x contrast ratio for normal text (AA).
 MIN_CONTRAST_RATIO_AA: Final[float] = 4.5
 
-_UI_STATIC_DIR = Path(__file__).resolve().parent / "static"
-APP_THEME_STATIC_CSS = _UI_STATIC_DIR / "app_theme.css"
-EXTERNAL_LINKS_JS = _UI_STATIC_DIR / "external_links.js"
+APP_THEME_STATIC_CSS = UI_STATIC_DIR / "app_theme.css"
+EXTERNAL_LINKS_JS = UI_STATIC_DIR / "external_links.js"
 
 
 @dataclass(frozen=True, slots=True)

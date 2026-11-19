@@ -13,13 +13,16 @@ import os
 import subprocess
 import sys
 from dataclasses import dataclass
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
-from tests.repo_paths import REPO_ROOT
+from src.grocery_wizard.paths import REPO_ROOT
+from tests.repo_paths import SRC_PACKAGE_ROOT
 
-PACKAGE_ROOT = REPO_ROOT / "src" / "grocery_wizard"
+if TYPE_CHECKING:
+    from pathlib import Path
+
 INTERNAL_PREFIX = "src.grocery_wizard"
 
 
@@ -58,7 +61,7 @@ def _resolve_from_module(node: ast.ImportFrom, source_file: Path) -> str | None:
 
 def _collect_internal_imports() -> list[InternalImport]:
     found: list[InternalImport] = []
-    for path in sorted(PACKAGE_ROOT.rglob("*.py")):
+    for path in sorted(SRC_PACKAGE_ROOT.rglob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
             if not isinstance(node, ast.ImportFrom):
@@ -75,7 +78,7 @@ def _collect_internal_imports() -> list[InternalImport]:
 
 
 def _importable_modules() -> list[str]:
-    names = {_module_name_for(path) for path in PACKAGE_ROOT.rglob("*.py")}
+    names = {_module_name_for(path) for path in SRC_PACKAGE_ROOT.rglob("*.py")}
     return sorted(name for name in names if not name.endswith("__main__"))
 
 
@@ -96,7 +99,7 @@ def test_every_internal_from_import_names_something_that_exists() -> None:
     for item in _collect_internal_imports():
         try:
             module = importlib.import_module(item.module)
-        except Exception as exc:
+        except (ImportError, ModuleNotFoundError, OSError, SyntaxError, ValueError) as exc:
             missing.append(f"{item.describe()} (module failed to import: {exc!r})")
             continue
         if hasattr(module, item.name):
@@ -124,11 +127,11 @@ def test_every_module_imports_in_a_fresh_interpreter() -> None:
             f"for name in {_importable_modules()!r}:",
             "    try:",
             "        importlib.import_module(name)",
-            "    except Exception as exc:",
+            "    except (ImportError, ModuleNotFoundError, OSError, SyntaxError, ValueError) as exc:",
             "        failures.append(f'{name}: {exc!r}')",
             "print('\\n'.join(failures))",
             "sys.exit(1 if failures else 0)",
-        ]
+        ],
     )
     env = {
         **os.environ,
@@ -150,3 +153,18 @@ def test_every_module_imports_in_a_fresh_interpreter() -> None:
 @pytest.mark.parametrize("module", [f"{INTERNAL_PREFIX}.ui.app"])
 def test_streamlit_entry_module_exposes_main(module: str) -> None:
     assert callable(importlib.import_module(module).main)
+
+
+def test_parsed_does_not_import_normalize_at_module_level() -> None:
+    """``format_ingredient_for_storage`` must not force a ``parsed`` ↔ ``normalize`` load cycle."""
+    path = SRC_PACKAGE_ROOT / "ingredients" / "parsed.py"
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    forbidden = f"{INTERNAL_PREFIX}.ingredients.normalize"
+    for node in tree.body:
+        if not isinstance(node, ast.ImportFrom):
+            continue
+        module = _resolve_from_module(node, path)
+        if module == forbidden:
+            pytest.fail(
+                f"{path.relative_to(REPO_ROOT)}:{node.lineno} imports normalize at module level"
+            )

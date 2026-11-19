@@ -26,6 +26,7 @@ from src.grocery_wizard.integrations.notion.household import (
 )
 from src.grocery_wizard.integrations.notion.recipes import DatabaseSchema, NotionRecipesDB, Recipe
 from src.grocery_wizard.integrations.notion.table import NotionDatabase
+from src.grocery_wizard.integrations.notion_io_errors import NOTION_BOUNDARY_ERRORS
 
 CI_RECIPES_LABEL = "[GW CI] Recipes"
 CI_PANTRY_LABEL = "[GW CI] Pantry Staples"
@@ -56,7 +57,7 @@ def _column_type_errors(
             (
                 f"{database_label}: missing property {name!r} (found: {found}). "
                 "Rename or restore the column to match production."
-            )
+            ),
         ]
     actual = column_types[name]
     if actual not in expected_types:
@@ -77,7 +78,7 @@ def collect_recipes_schema_errors(
             column_types={n: c.type for n, c in schema.all_columns.items()},
             name=schema.name_column,
             expected_types=("title",),
-        )
+        ),
     )
     errors.extend(
         _column_type_errors(
@@ -85,12 +86,12 @@ def collect_recipes_schema_errors(
             column_types={n: c.type for n, c in schema.all_columns.items()},
             name=schema.link_column,
             expected_types=("url",),
-        )
+        ),
     )
     if not schema.ingredients_column:
         errors.append(
             f"{database_label}: missing Ingredients text column. "
-            "Add Ingredients (rich_text) or set GROCERY_WIZARD_INGREDIENTS_COLUMN."
+            "Add Ingredients (rich_text) or set GROCERY_WIZARD_INGREDIENTS_COLUMN.",
         )
     elif schema.ingredients_column:
         errors.extend(
@@ -99,7 +100,7 @@ def collect_recipes_schema_errors(
                 column_types={n: c.type for n, c in schema.all_columns.items()},
                 name=schema.ingredients_column,
                 expected_types=("rich_text", "text"),
-            )
+            ),
         )
     return errors
 
@@ -116,7 +117,7 @@ def collect_pantry_schema_errors(
             column_types=column_types,
             name=PANTRY_NAME_COLUMN,
             expected_types=("title",),
-        )
+        ),
     )
     try:
         aisle_column = resolve_pantry_aisle_column(column_types)
@@ -129,7 +130,7 @@ def collect_pantry_schema_errors(
                 column_types=column_types,
                 name=aisle_column,
                 expected_types=("select",),
-            )
+            ),
         )
     return errors
 
@@ -164,7 +165,7 @@ def collect_weekly_plans_schema_errors(
                 column_types=column_types,
                 name=name,
                 expected_types=expected,
-            )
+            ),
         )
     return errors
 
@@ -181,7 +182,7 @@ def _open_household_database(
         return None
     try:
         return NotionDatabase(config, database_id)
-    except Exception as exc:
+    except NOTION_BOUNDARY_ERRORS as exc:
         report.errors.append(f"{database_label}: cannot reach database ({database_id}): {exc}")
         return None
 
@@ -196,7 +197,7 @@ def _verify_recipes_database(
         return None
     try:
         recipes_db = NotionRecipesDB(config)
-    except Exception as exc:
+    except NOTION_BOUNDARY_ERRORS as exc:
         report.errors.append(f"{CI_RECIPES_LABEL}: cannot reach database ({db_id}): {exc}")
         return None
     report.errors.extend(collect_recipes_schema_errors(recipes_db.schema))
@@ -213,19 +214,19 @@ def verify_recipe_query_smoke(
         return
     try:
         recipes: list[Recipe] = recipes_db.query_recipes()
-    except Exception as exc:
+    except NOTION_BOUNDARY_ERRORS as exc:
         report.errors.append(f"{database_label}: query_recipes failed: {exc}")
         return
     if not recipes:
         report.notes.append(
             f"{database_label}: database is empty; recipe query smoke skipped "
-            "(seed CI recipes for stronger checks)."
+            "(seed CI recipes for stronger checks).",
         )
         return
     parseable = [recipe for recipe in recipes if recipe.name.strip()]
     if not parseable:
         report.errors.append(
-            f"{database_label}: {len(recipes)} page(s) returned but none had a readable name."
+            f"{database_label}: {len(recipes)} page(s) returned but none had a readable name.",
         )
 
 

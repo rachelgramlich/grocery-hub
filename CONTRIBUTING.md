@@ -52,6 +52,13 @@ Ruff is the single linting tool. The enabled rule categories are documented in `
 | `TRY` | tryceratops — move success path to `else`, not `try` body |
 | `EM` | no f-strings or literals as the first arg to `raise Exception(...)` |
 | `FURB` | modernise patterns — `path.read_text()`, `x or y` over `x if x else y` |
+| `PTH` | prefer `pathlib` over `os.path` |
+| `LOG` | logging call hygiene |
+| `ICN` / `TID` | import alias and layout conventions |
+
+The repo is clean on `PTH`/`LOG`/`ICN`/`TID`, **`BLE`**, **`COM`** (except `COM812`, handled by the formatter), and **`TC`** (type-only imports in `TYPE_CHECKING` blocks). **`INP`** expects `__init__.py` in test package dirs. **`SLF`** is on for product code; tests and `weekly_plan_add` / `notion_cache` have narrow per-file ignores where cross-module `_` helpers are intentional.
+
+Promote function-level imports to module top when import-integrity and cold-start tests stay green. Keep lazy imports only for real cycles (`ui/app.py` Notion cache clears, `weekly_plan_add` ↔ `state`, NYT sync ↔ recipes). `ingredients/parsed` and `normalize` share `junk.py`, `line_strips.py`, and `ingredient_unicode.py` instead of importing each other at load. Use `integrations/notion/lazy_household.py` for household Notion DB construction.
 
 ### Ignored rules (with rationale)
 
@@ -215,7 +222,20 @@ from src.grocery_wizard.recipes.scraper import looks_fragmented
 
 ---
 
+## Path anchors
+
+- **Package and repo roots:** `src/grocery_wizard/paths.py` (`REPO_ROOT`, `PACKAGE_ROOT`, `UI_APP_PATH`, …).
+- **Tests:** `tests/repo_paths.py` re-exports those anchors and adds `package_module_source()`; UI tests use `tests/src/grocery_wizard/ui/ui_source.py`.
+
+Do not add new `Path(__file__).parents[N]` literals in product or test code unless bootstrapping `ui/app.py` before `sys.path` is ready. Document new shared constants in [`docs/architecture/path-anchors.md`](docs/architecture/path-anchors.md).
+
+---
+
 ## Control Flow
+
+### Guard clauses
+
+Prefer early returns so the happy path stays unindented. Fold `if outer: if inner:` into sequential guards when both branches return or stop.
 
 ### Return conditions directly
 
