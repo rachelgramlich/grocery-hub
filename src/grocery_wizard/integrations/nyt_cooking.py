@@ -221,11 +221,17 @@ class NYTCookingClient:
         self._http = session or requests.Session()
         self._http.headers["User-Agent"] = USER_AGENT
         if self._credentials:
-            self._http.cookies.set(
-                "NYT-S",
-                self._credentials.nyt_s_cookie,
-                domain=".nytimes.com",
-            )
+            self._apply_nyt_cookie()
+
+    def _apply_nyt_cookie(self) -> None:
+        """Re-apply NYT-S before each request; NYT may drop it on responses."""
+        if self._credentials is None:
+            return
+        self._http.cookies.set(
+            "NYT-S",
+            self._credentials.nyt_s_cookie,
+            domain=".nytimes.com",
+        )
 
     @property
     def credentials(self) -> NytCredentials | None:
@@ -240,6 +246,7 @@ class NYTCookingClient:
         return self._credentials
 
     def _get(self, url: str, **kwargs: Any) -> requests.Response:
+        self._apply_nyt_cookie()
         try:
             response = self._http.get(url, timeout=REQUEST_TIMEOUT, **kwargs)
         except requests.RequestException as exc:
@@ -253,6 +260,30 @@ class NYTCookingClient:
             raise NytNotFoundError(f"Nothing found at {url}.")
         if not response.ok:
             raise NytNetworkError(f"NYT Cooking returned HTTP {response.status_code}.")
+        return response
+
+    def _post(self, url: str, **kwargs: Any) -> requests.Response:
+        self._apply_nyt_cookie()
+        try:
+            response = self._http.post(url, timeout=REQUEST_TIMEOUT, **kwargs)
+        except requests.RequestException as exc:
+            raise NytNetworkError(str(exc)) from exc
+        if response.status_code in (401, 403):
+            raise NytAuthError(
+                "NYT Cooking rejected the request — cookie missing, invalid, or expired."
+            )
+        return response
+
+    def _delete(self, url: str, **kwargs: Any) -> requests.Response:
+        self._apply_nyt_cookie()
+        try:
+            response = self._http.delete(url, timeout=REQUEST_TIMEOUT, **kwargs)
+        except requests.RequestException as exc:
+            raise NytNetworkError(str(exc)) from exc
+        if response.status_code in (401, 403):
+            raise NytAuthError(
+                "NYT Cooking rejected the request — cookie missing, invalid, or expired."
+            )
         return response
 
     def _json(self, response: requests.Response, what: str) -> dict[str, Any]:
@@ -301,6 +332,50 @@ class NYTCookingClient:
                 return collection
         return None
 
+    def create_collection(self, name: str) -> NytCollection:
+        """Create a recipe-box folder (collection)."""
+        self._require_credentials()
+        response = self._post(
+            f"{SITE}/api/v5/users/me/collections",
+            json={"name": name},
+            headers={**API_HEADERS, "Content-Type": "application/json"},
+        )
+        if response.status_code != 201:
+            raise NytNetworkError(
+                f"NYT Cooking returned HTTP {response.status_code} creating collection."
+            )
+        payload = self._json(response, "Collection")
+        return NytCollection(
+            id=str(payload.get("id", "")),
+            name=str(payload.get("name", name)),
+            recipe_count=0,
+        )
+
+    def ensure_collection(self, name: str) -> NytCollection:
+        """Return existing folder by name or create it."""
+        existing = self.find_collection_by_name(name)
+        if existing is not None:
+            return existing
+        return self.create_collection(name)
+
+    def collection_recipe_ids(self, collection_id: str | int) -> list[str]:
+        """Recipe ids in a folder via GET /api/v5/collections/{id}."""
+        self._require_credentials()
+        response = self._get(
+            f"{SITE}/api/v5/collections/{int(collection_id)}",
+            headers=API_HEADERS,
+        )
+        col = self._json(response, "Collection detail").get("collection") or {}
+        ids: list[str] = []
+        for item in col.get("collectables") or []:
+            if not isinstance(item, dict):
+                continue
+            recipe_id = item.get("recipe_id")
+            item_type = str(item.get("type") or "")
+            if recipe_id is not None and item_type in ("", "recipe"):
+                ids.append(str(recipe_id))
+        return ids
+
     def list_saved_recipes(
         self,
         *,
@@ -309,17 +384,18 @@ class NYTCookingClient:
         collection_id: str | None = None,
     ) -> dict[str, Any]:
         """Return one page of saved recipes from the recipe box."""
-        creds = self._require_credentials()
+        self._require_credentials()
         params: dict[str, str | int] = {
             "q": "",
             "page": page,
             "per_page": per_page,
+            "sort": "rating",
         }
         if collection_id:
             params["collection_id"] = collection_id
 
         response = self._get(
-            f"{SITE}/api/v2/users/{creds.regi_id}/search/recipe_box_search",
+            f"{SITE}/api/v2/users/me/search/recipe_box_search",
             params=params,
             headers=API_HEADERS,
         )
@@ -332,6 +408,7 @@ class NYTCookingClient:
         per_page: int = DEFAULT_PER_PAGE,
     ) -> Iterator[NytSavedRecipe]:
         """Yield every saved recipe, paging through the recipe box."""
+        seen: set[str] = set()
         page = 1
         while True:
             payload = self.list_saved_recipes(
@@ -340,20 +417,81 @@ class NYTCookingClient:
                 collection_id=collection_id,
             )
             items = payload.get("collectables") or []
+            if not items:
+                break
             for item in items:
                 if not isinstance(item, dict):
                     continue
+                rid = str(item.get("id", ""))
+                if not rid or rid in seen:
+                    continue
+                seen.add(rid)
                 yield NytSavedRecipe(
-                    id=str(item.get("id", "")),
+                    id=rid,
                     name=str(item.get("name", "")),
                     url=_absolute_url(str(item.get("url", ""))),
                     author=item.get("byline"),
                 )
 
+            meta = payload.get("meta") or {}
+            total_pages = int(meta.get("total_pages") or 0)
+            if total_pages and page >= total_pages:
+                break
             total = int(payload.get("collectables_count") or 0)
-            if page * per_page >= total or not items:
+            if total and page * per_page >= total:
                 break
             page += 1
+
+    def save_recipe(self, recipe_id: int | str) -> int:
+        """Save an NYT recipe to the recipe box. Returns HTTP 201 or 409."""
+        creds = self._require_credentials()
+        response = self._post(
+            f"{SITE}/api/v2/users/{creds.regi_id}/collectables/recipe",
+            json={"id": int(recipe_id)},
+            headers={**API_HEADERS, "Content-Type": "application/json"},
+        )
+        if response.status_code not in (201, 409):
+            raise NytNetworkError(
+                f"NYT Cooking returned HTTP {response.status_code} saving recipe."
+            )
+        return response.status_code
+
+    def unsave_recipe(self, recipe_id: int | str) -> int:
+        """Remove a recipe from the recipe box."""
+        creds = self._require_credentials()
+        response = self._delete(
+            f"{SITE}/api/v2/users/{creds.regi_id}/collectables/recipe/{int(recipe_id)}",
+            headers=API_HEADERS,
+        )
+        if response.status_code not in (204, 404):
+            raise NytNetworkError(
+                f"NYT Cooking returned HTTP {response.status_code} unsaving recipe."
+            )
+        return response.status_code
+
+    def add_to_collection(self, collection_id: str | int, recipe_id: int | str) -> int:
+        """Add a saved recipe to a folder. Returns HTTP 201 or 409."""
+        self._require_credentials()
+        response = self._post(
+            f"{SITE}/api/v5/collections/{int(collection_id)}/collectables",
+            json={"recipe_id": int(recipe_id)},
+            headers={**API_HEADERS, "Content-Type": "application/json"},
+        )
+        if response.status_code not in (201, 409):
+            raise NytNetworkError(
+                f"NYT Cooking returned HTTP {response.status_code} adding to collection."
+            )
+        return response.status_code
+
+    def save_recipe_to_collection(
+        self,
+        collection_id: str | int,
+        recipe_id: int | str,
+    ) -> tuple[int, int]:
+        """Save to recipe box, then add to folder."""
+        save_status = self.save_recipe(recipe_id)
+        folder_status = self.add_to_collection(collection_id, recipe_id)
+        return save_status, folder_status
 
     def get_recipe(self, recipe_id: str) -> NytRecipe:
         """Fetch full recipe details from the JSON recipe endpoint."""
