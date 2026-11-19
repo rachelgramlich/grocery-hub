@@ -15,9 +15,12 @@ def render_copy_button(
     *,
     label: str = "Copy",
     key: str,
+    html_clipboard: str | None = None,
+    caption: str | None = None,
 ) -> None:
     """Render a full-width control that copies ``text`` to the clipboard."""
     payload = json.dumps(text)
+    html_js = "null" if html_clipboard is None else json.dumps(html_clipboard)
     label_json = json.dumps(label)
     copied_json = json.dumps("Copied!")
     safe_label = html.escape(label)
@@ -45,10 +48,22 @@ def render_copy_button(
           (function () {{
             const btn = document.getElementById("gw-copy-{key}");
             const text = {payload};
+            const htmlClip = {html_js};
             const label = {label_json};
             const copied = {copied_json};
+            function copyPayload() {{
+              if (htmlClip !== null) {{
+                return navigator.clipboard.write([
+                  new ClipboardItem({{
+                    "text/plain": new Blob([text], {{ type: "text/plain" }}),
+                    "text/html": new Blob([htmlClip], {{ type: "text/html" }}),
+                  }}),
+                ]);
+              }}
+              return navigator.clipboard.writeText(text);
+            }}
             btn.addEventListener("click", function () {{
-              navigator.clipboard.writeText(text).then(function () {{
+              copyPayload().then(function () {{
                 btn.textContent = copied;
                 setTimeout(function () {{ btn.textContent = label; }}, 2000);
               }});
@@ -58,4 +73,5 @@ def render_copy_button(
         """,
         height=52,
     )
-    st.caption("Select-all in the text area above, or use Copy for the same text.")
+    default_caption = "Select-all in the text area above, or use Copy for the same text."
+    st.caption(caption or default_caption)

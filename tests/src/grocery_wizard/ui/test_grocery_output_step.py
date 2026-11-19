@@ -35,7 +35,7 @@ def test_output_step_shows_added_removed_and_editable_grocery_list() -> None:
     assert 'with st.expander("Customize list"' not in result_block
     assert "### Copy list" in result_block
     assert "Extra items (one per line)" not in result_block
-    assert "Edit below, then copy meals and groceries." in result_block
+    assert "Copy meals** for Apple Notes" in result_block
     assert "render_copy_button" in result_block
     assert "st.download_button" not in result_block
     assert "Download list" not in result_block
