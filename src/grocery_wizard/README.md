@@ -256,7 +256,7 @@ Key columns:
 | Cuisine | multi_select | Italian, Asian, Mexican, … |
 | Dinner/Lunch Category | multi_select | Curry, Pasta, Bowl, …; include **N/A** for dessert/drink/breakfast |
 | Cuisine / Tags | multi_select | Include **N/A** when a value is not applicable (optional explicit tag) |
-| Protein | multi_select | **None** (or **N/A**) means no primary protein |
+| Protein | multi_select | **N/A** = no primary protein (**None** is legacy; normalize via repair) |
 | Dinner: Weeknight Friendly | checkbox | Meal-planning filter |
 | Synced from NYT recipe box | checkbox | Set automatically by NYT recipe-box sync in the Streamlit app |
 

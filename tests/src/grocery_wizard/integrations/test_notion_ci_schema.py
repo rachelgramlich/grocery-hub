@@ -37,7 +37,7 @@ def _recipe_schema(*, ingredients: str | None = "Ingredients") -> DatabaseSchema
     )
     cuisine = ColumnInfo(name="Cuisine", type="multi_select", options=["American", "N/A"])
     tags = ColumnInfo(name="Tags", type="multi_select", options=["N/A"])
-    protein = ColumnInfo(name="Protein", type="multi_select", options=["None"])
+    protein = ColumnInfo(name="Protein", type="multi_select", options=["None", "N/A"])
     columns.update(
         {
             "Dinner/Lunch Category": dinner,

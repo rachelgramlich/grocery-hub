@@ -24,6 +24,7 @@ from src.grocery_wizard.recipes.recipe_maintenance import (
     run_image_backfill,
     run_ingredients_backfill,
     run_metadata_backfill,
+    run_normalize_protein_none_to_na,
     run_strip_invalid_dinner_categories,
 )
 from src.grocery_wizard.recipes.scraper import ScrapedRecipe, ScrapeError
@@ -37,7 +38,11 @@ def _full_schema(*, filter_columns_only_meal: bool = False) -> DatabaseSchema:
     meal = ColumnInfo(name="Meal", type="select", options=["Dinner", "Dessert", "Lunch"])
     weeknight = ColumnInfo(name="Dinner: Weeknight Friendly", type="checkbox", options=[])
     cuisine = ColumnInfo(name="Cuisine", type="multi_select", options=["Italian"])
-    protein = ColumnInfo(name="Protein", type="multi_select", options=["Chicken"])
+    protein = ColumnInfo(
+        name="Protein",
+        type="multi_select",
+        options=["N/A", "None", "Chicken"],
+    )
     dinner_category = ColumnInfo(
         name="Dinner Category",
         type="multi_select",
@@ -249,6 +254,10 @@ def test_run_common_metadata_repair_runs_strip_and_backfill() -> None:
             return_value=BackfillSummary(succeeded=1, scanned=1),
         ) as strip_mock,
         patch(
+            "src.grocery_wizard.recipes.recipe_maintenance.run_normalize_protein_none_to_na",
+            return_value=BackfillSummary(succeeded=0, scanned=0),
+        ) as protein_mock,
+        patch(
             "src.grocery_wizard.recipes.recipe_maintenance.run_metadata_backfill",
             return_value=BackfillSummary(succeeded=2, scanned=3),
         ) as backfill_mock,
@@ -257,10 +266,23 @@ def test_run_common_metadata_repair_runs_strip_and_backfill() -> None:
 
     assert summary.strip is not None
     assert summary.strip.succeeded == 1
+    assert summary.protein_none_to_na is not None
     assert summary.backfill is not None
     assert summary.backfill.succeeded == 2
     strip_mock.assert_called_once()
+    protein_mock.assert_called_once()
     backfill_mock.assert_called_once()
+
+
+def test_run_normalize_protein_none_to_na() -> None:
+    schema = _full_schema()
+    db = MagicMock()
+    db.schema = schema
+    dessert = _recipe(meal="Dessert")
+    dessert.properties["Protein"] = ["None"]
+    summary = run_normalize_protein_none_to_na(db, [dessert])
+    assert summary.succeeded == 1
+    db.update_recipe.assert_called_once_with("page-1", {"Protein": ["N/A"]})
 
 
 def test_dessert_with_na_only_dinner_category_not_invalid() -> None:

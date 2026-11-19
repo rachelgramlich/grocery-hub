@@ -157,8 +157,8 @@ def render_recipe_maintenance() -> None:
     with st.container(border=True):
         st.markdown("**Standard metadata repair**")
         st.caption(
-            "1) Set **N/A** on Dinner/Lunch Category for dessert/drink/breakfast (wrong tags or "
-            "blank), then 2) backfill any other empty metadata."
+            "1) Set **N/A** on Dinner/Lunch Category for non-main meals, 2) rewrite Protein "
+            "**None** → **N/A**, then 3) backfill any other empty metadata."
         )
         st.write(
             f"**{len(invalid_dinner_category)}** to strip · "

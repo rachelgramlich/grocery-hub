@@ -27,6 +27,11 @@ from src.grocery_wizard.recipes.recipe_meal_plan_stats import (
     filter_columns_for_recipe_classify,
     is_meal_plan_tracking_column,
 )
+from src.grocery_wizard.recipes.recipe_metadata_na import (
+    PROTEIN_LEGACY_NONE_LABEL,
+    protein_column_name,
+    protein_na_option,
+)
 from src.grocery_wizard.recipes.recipe_schema_columns import (
     dinner_lunch_category_na_option,
     is_dinner_lunch_category_column,
@@ -57,6 +62,7 @@ class CommonMetadataRepairSummary:
     """Result of strip + metadata backfill (rule-based repair, not blind overwrite)."""
 
     strip: BackfillSummary | None = None
+    protein_none_to_na: BackfillSummary | None = None
     backfill: BackfillSummary | None = None
 
 
@@ -402,9 +408,70 @@ def format_common_metadata_repair_summary(summary: CommonMetadataRepairSummary) 
     parts: list[str] = []
     if summary.strip is not None:
         parts.append(format_backfill_summary("Strip invalid categories", summary.strip))
+    if summary.protein_none_to_na is not None:
+        parts.append(format_backfill_summary("Protein None → N/A", summary.protein_none_to_na))
     if summary.backfill is not None:
         parts.append(format_backfill_summary("Metadata backfill", summary.backfill))
     return " · ".join(parts) if parts else "No repair steps ran"
+
+
+def recipe_has_legacy_protein_none(recipe: Recipe, schema: DatabaseSchema) -> bool:
+    """Protein is **None** but the schema also offers **N/A** (should normalize)."""
+    column = protein_column_name(schema)
+    col = schema.all_columns.get(column) if column else None
+    if not column or col is None:
+        return False
+    na_label = protein_na_option(col.options)
+    if not na_label or na_label == PROTEIN_LEGACY_NONE_LABEL:
+        return False
+    current = recipe.properties.get(column)
+    if not isinstance(current, list) or not current:
+        return False
+    items = [str(item).strip() for item in current if str(item).strip()]
+    return PROTEIN_LEGACY_NONE_LABEL in items and na_label not in items
+
+
+def recipes_legacy_protein_none(recipes: list[Recipe], schema: DatabaseSchema) -> list[Recipe]:
+    return [recipe for recipe in recipes if recipe_has_legacy_protein_none(recipe, schema)]
+
+
+def run_normalize_protein_none_to_na(
+    db: NotionRecipesDB,
+    candidates: list[Recipe],
+    *,
+    on_progress: ProgressCallback | None = None,
+    on_fraction: FractionCallback | None = None,
+) -> BackfillSummary:
+    column = protein_column_name(db.schema)
+    col = db.schema.all_columns.get(column) if column else None
+    na_label = protein_na_option(col.options) if col else None
+    summary = BackfillSummary(scanned=len(candidates))
+    if not column or not col or not na_label or na_label == PROTEIN_LEGACY_NONE_LABEL:
+        summary.skipped = len(candidates)
+        return summary
+
+    total = len(candidates)
+    for index, recipe in enumerate(candidates, start=1):
+        if on_fraction and total:
+            on_fraction(index / total)
+        if not recipe_has_legacy_protein_none(recipe, db.schema):
+            summary.skipped += 1
+            continue
+        current = recipe.properties.get(column)
+        assert isinstance(current, list)
+        updated = [
+            na_label if str(item).strip() == PROTEIN_LEGACY_NONE_LABEL else str(item).strip()
+            for item in current
+            if str(item).strip()
+        ]
+        db.update_recipe(recipe.page_id, {column: updated})
+        summary.succeeded += 1
+        if on_progress:
+            on_progress(f"Protein None → N/A: {recipe.name}")
+
+    if on_fraction:
+        on_fraction(1.0)
+    return summary
 
 
 def run_common_metadata_repair(
@@ -413,13 +480,14 @@ def run_common_metadata_repair(
     *,
     nyt_client: Any | None = None,
     do_strip: bool = True,
+    do_protein_normalize: bool = True,
     do_backfill: bool = True,
     on_progress: ProgressCallback | None = None,
     on_fraction: FractionCallback | None = None,
 ) -> CommonMetadataRepairSummary:
-    """Strip rule-invalid dinner/lunch tags, then backfill empty meal-aware metadata."""
+    """Strip rule-invalid dinner/lunch tags, normalize Protein, then backfill metadata."""
     result = CommonMetadataRepairSummary()
-    steps = [do_strip, do_backfill]
+    steps = [do_strip, do_protein_normalize, do_backfill]
     step_index = 0
 
     def _step_fraction(inner: float, *, active: bool) -> None:
@@ -436,6 +504,19 @@ def run_common_metadata_repair(
         result.strip = run_strip_invalid_dinner_categories(
             db,
             invalid,
+            on_progress=on_progress,
+            on_fraction=lambda f: _step_fraction(f, active=True),
+        )
+        step_index += 1
+        _step_fraction(1.0, active=False)
+
+    if do_protein_normalize:
+        legacy_protein = recipes_legacy_protein_none(recipes, db.schema)
+        if on_progress:
+            on_progress(f"Protein: {len(legacy_protein)} recipe(s) with legacy None")
+        result.protein_none_to_na = run_normalize_protein_none_to_na(
+            db,
+            legacy_protein,
             on_progress=on_progress,
             on_fraction=lambda f: _step_fraction(f, active=True),
         )

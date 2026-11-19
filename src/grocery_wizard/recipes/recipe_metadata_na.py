@@ -10,8 +10,35 @@ from src.grocery_wizard.recipes.recipe_schema_columns import (
 
 METADATA_NA_LABELS = frozenset({"N/A", "NA"})
 
-# Protein uses **None** in Notion as “no protein” — treat like N/A for validation.
+# **N/A** is preferred; **None** is a legacy not-applicable label (still recognized).
 PROTEIN_NOT_APPLICABLE_LABELS = frozenset({"N/A", "NA", "None"})
+PROTEIN_LEGACY_NONE_LABEL = "None"
+
+
+def protein_column_name(schema: DatabaseSchema) -> str | None:
+    for col in schema.filter_columns:
+        if col.name.lower() == "protein":
+            return col.name
+    return None
+
+
+def protein_na_option(options: list[str]) -> str | None:
+    """Preferred not-applicable protein tag (**N/A** when present)."""
+    return dinner_lunch_category_na_option(options)
+
+
+def protein_is_not_applicable_value(value: object, *, na_label: str) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, list):
+        items = {str(item).strip() for item in value if str(item).strip()}
+        if not items:
+            return False
+        return items <= PROTEIN_NOT_APPLICABLE_LABELS and (
+            na_label in items or PROTEIN_LEGACY_NONE_LABEL in items
+        )
+    text = str(value).strip()
+    return text in PROTEIN_NOT_APPLICABLE_LABELS
 
 
 def column_expects_na_option(column: ColumnInfo) -> bool:
@@ -40,10 +67,10 @@ def collect_recipes_na_option_errors(
         if col.type != "multi_select":
             continue
         if col.name == "Protein":
-            if not column_has_na_option(col):
+            if protein_na_option(col.options) is None:
                 errors.append(
-                    f"{database_label}: Protein multi_select should include "
-                    f"{sorted(PROTEIN_NOT_APPLICABLE_LABELS)!r} (e.g. None)."
+                    f"{database_label}: Protein multi_select should include an N/A option "
+                    f"({PROTEIN_LEGACY_NONE_LABEL!r} is legacy)."
                 )
             continue
         if column_expects_na_option(col) and not column_has_na_option(col):

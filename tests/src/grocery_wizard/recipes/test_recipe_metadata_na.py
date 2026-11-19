@@ -12,7 +12,7 @@ def _schema_with_dinner_lunch(*, dinner_options: list[str]) -> DatabaseSchema:
     )
     cuisine = ColumnInfo(name="Cuisine", type="multi_select", options=["American", "N/A"])
     tags = ColumnInfo(name="Tags", type="multi_select", options=["Weeknight", "N/A"])
-    protein = ColumnInfo(name="Protein", type="multi_select", options=["None", "Chicken"])
+    protein = ColumnInfo(name="Protein", type="multi_select", options=["N/A", "None", "Chicken"])
     cols = {
         "Name": ColumnInfo(name="Name", type="title"),
         "Link": ColumnInfo(name="Link", type="url"),
