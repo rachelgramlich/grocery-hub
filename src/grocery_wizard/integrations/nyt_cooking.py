@@ -1258,6 +1258,7 @@ def _fetch_reclassify_total_minutes(
 def _build_reclassify_field_updates(
     recipe: Any,
     *,
+    schema: Any,
     new_meal: Any,
     old_meal: Any,
     total_minutes: float | None,
@@ -1316,9 +1317,20 @@ def _build_reclassify_field_updates(
     effective_meal = fields.get("Meal", old_meal)
     meals = normalize_meal_values(effective_meal)
     if dinner_category_column and meals & MEALS_WITHOUT_DINNER_CATEGORY:
+        from src.grocery_wizard.recipes.recipe_schema_columns import (
+            dinner_lunch_category_na_option,
+            is_dinner_lunch_category_na_only,
+        )
+
+        col = schema.all_columns.get(dinner_category_column)
+        na_label = dinner_lunch_category_na_option(col.options) if col else None
         current_dinner_category = recipe.properties.get(dinner_category_column)
-        if not is_blank_metadata_value("multi_select", current_dinner_category):
-            fields[dinner_category_column] = []
+        needs_na = na_label and (
+            is_blank_metadata_value("multi_select", current_dinner_category)
+            or not is_dinner_lunch_category_na_only(current_dinner_category, na_label=na_label)
+        )
+        if needs_na:
+            fields[dinner_category_column] = [na_label]
             summary.dinner_category_cleared += 1
             summary.changes.append(
                 NytReclassifyChange(
@@ -1326,7 +1338,7 @@ def _build_reclassify_field_updates(
                     name=title,
                     field=dinner_category_column,
                     old_value=current_dinner_category,
-                    new_value=[],
+                    new_value=[na_label],
                 )
             )
 
@@ -1392,6 +1404,7 @@ def reclassify_nyt_synced_recipes(
         )
         fields = _build_reclassify_field_updates(
             recipe,
+            schema=db.schema,
             new_meal=new_meal,
             old_meal=old_meal,
             total_minutes=total_minutes,

@@ -157,8 +157,8 @@ def render_recipe_maintenance() -> None:
     with st.container(border=True):
         st.markdown("**Standard metadata repair**")
         st.caption(
-            "1) Strip invalid **Dinner/Lunch Category** on dessert/drink/breakfast, "
-            "then 2) backfill any still-empty metadata (including category for lunch/dinner)."
+            "1) Set **N/A** on Dinner/Lunch Category for dessert/drink/breakfast (wrong tags or "
+            "blank), then 2) backfill any other empty metadata."
         )
         st.write(
             f"**{len(invalid_dinner_category)}** to strip · "
@@ -208,16 +208,16 @@ def render_recipe_maintenance() -> None:
             )
 
     with st.container(border=True):
-        st.markdown("**Strip Dinner/Lunch Category on desserts / drinks / breakfast**")
+        st.markdown("**Set Dinner/Lunch Category to N/A (desserts / drinks / breakfast)**")
         st.caption(
-            "Clears Dinner/Lunch Category when Meal is Dessert, Drink, or Breakfast "
-            "(fixes mistaken N/A or One-Pot / One-Pan on brownies and similar)."
+            "Keeps **N/A** as the meaningful value for non-main meals; replaces wrong tags "
+            "(One-Pot / One-Pan on brownies) or empty cells. Rows already **N/A** are left alone."
         )
         st.write(
-            f"**{len(invalid_dinner_category)}** recipe(s) with a dinner/lunch category to clear."
+            f"**{len(invalid_dinner_category)}** recipe(s) missing N/A or with a wrong category."
         )
         if st.button(
-            "Strip invalid dinner categories",
+            "Set dinner/lunch category to N/A",
             type="secondary",
             key="recipe_maint_strip_dinner_category",
             disabled=not invalid_dinner_category,
@@ -236,7 +236,7 @@ def render_recipe_maintenance() -> None:
                 )
 
             _run_backfill_with_progress(
-                label="Strip invalid dinner categories",
+                label="Set dinner/lunch category to N/A",
                 runner=_strip_runner,
             )
 

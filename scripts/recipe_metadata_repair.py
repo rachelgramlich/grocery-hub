@@ -39,7 +39,7 @@ def main() -> None:
     parser.add_argument(
         "--strip",
         action="store_true",
-        help="Clear Dinner/Lunch Category on dessert, drink, and breakfast rows",
+        help="Set Dinner/Lunch Category to N/A on dessert, drink, and breakfast rows",
     )
     parser.add_argument(
         "--backfill",

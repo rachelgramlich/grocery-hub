@@ -791,7 +791,11 @@ def test_reclassify_clears_dinner_category_on_dessert() -> None:
             "Name": ColumnInfo(name="Name", type="title"),
             "Link": ColumnInfo(name="Link", type="url"),
             "Meal": ColumnInfo(name="Meal", type="multi_select"),
-            "Dinner Category": ColumnInfo(name="Dinner Category", type="multi_select"),
+            "Dinner Category": ColumnInfo(
+                name="Dinner Category",
+                type="multi_select",
+                options=["N/A", "One-Pot / One-Pan"],
+            ),
         },
     )
     db.query_recipes.return_value = [
@@ -814,7 +818,7 @@ def test_reclassify_clears_dinner_category_on_dessert() -> None:
     summary = reclassify_nyt_synced_recipes(db, client, dry_run=False)
 
     assert summary.dinner_category_cleared == 1
-    db.update_recipe.assert_called_once_with("page-brownie", {"Dinner Category": []})
+    db.update_recipe.assert_called_once_with("page-brownie", {"Dinner Category": ["N/A"]})
 
 
 def test_format_sync_summary_includes_counts() -> None:

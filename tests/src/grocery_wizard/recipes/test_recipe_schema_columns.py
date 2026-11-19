@@ -4,8 +4,10 @@ from src.grocery_wizard.integrations.notion import ColumnInfo
 from src.grocery_wizard.recipes.classify import classify_column
 from src.grocery_wizard.recipes.recipe_schema_columns import (
     dinner_lunch_category_column_name,
+    dinner_lunch_category_na_option,
     diversity_planning_columns,
     is_dinner_lunch_category_column,
+    is_dinner_lunch_category_na_only,
 )
 
 
@@ -13,6 +15,16 @@ def test_is_dinner_lunch_category_column_accepts_renamed_notion_column() -> None
     assert is_dinner_lunch_category_column("Dinner Category")
     assert is_dinner_lunch_category_column("Dinner/lunch category")
     assert is_dinner_lunch_category_column("Dinner/Lunch Category")
+
+
+def test_dinner_lunch_category_na_option() -> None:
+    assert dinner_lunch_category_na_option(["Pasta", "N/A"]) == "N/A"
+
+
+def test_is_dinner_lunch_category_na_only() -> None:
+    assert is_dinner_lunch_category_na_only(["N/A"], na_label="N/A")
+    assert not is_dinner_lunch_category_na_only(["Pasta"], na_label="N/A")
+    assert not is_dinner_lunch_category_na_only([], na_label="N/A")
 
 
 def test_classify_column_uses_rules_for_dinner_lunch_category() -> None:

@@ -172,7 +172,7 @@ def test_weeknight_friendly_from_title_heuristics() -> None:
     assert is_weeknight_friendly("Classic Beef Bourguignon", meal="Dinner") is False
 
 
-def test_classify_recipe_omits_dinner_category_for_dessert() -> None:
+def test_classify_recipe_sets_dinner_category_na_for_dessert() -> None:
     dinner_opts = ["Pasta", "One-Pot / One-Pan", "N/A"]
     result = classify_recipe(
         "Skillet Brownie With Chocolate Ganache Frosting",
@@ -183,7 +183,7 @@ def test_classify_recipe_omits_dinner_category_for_dessert() -> None:
         ],
     )
     assert result["Meal"] == ["Dessert"]
-    assert "Dinner Category" not in result
+    assert result["Dinner Category"] == ["N/A"]
 
 
 def test_classify_recipe_sheet_pan_paneer_is_dinner() -> None:

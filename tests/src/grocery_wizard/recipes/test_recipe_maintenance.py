@@ -41,7 +41,7 @@ def _full_schema(*, filter_columns_only_meal: bool = False) -> DatabaseSchema:
     dinner_category = ColumnInfo(
         name="Dinner Category",
         type="multi_select",
-        options=["Pasta"],
+        options=["Pasta", "N/A"],
     )
     filter_columns = [meal]
     if not filter_columns_only_meal:
@@ -132,7 +132,7 @@ def test_unchecked_weeknight_counts_as_gap_for_dinner() -> None:
     )
 
 
-def test_dessert_skips_protein_and_dinner_category_gaps() -> None:
+def test_dessert_needs_na_dinner_category_but_not_protein() -> None:
     schema = _full_schema()
     props = {
         "Meal": "Dessert",
@@ -148,7 +148,17 @@ def test_dessert_skips_protein_and_dinner_category_gaps() -> None:
         ingredients="flour",
         properties=props,
     )
-    assert not recipe_missing_metadata(recipe, schema)
+    assert recipe_missing_metadata(recipe, schema)
+
+    props["Dinner Category"] = ["N/A"]
+    recipe_ok = Recipe(
+        page_id="page-1",
+        name="Brownies",
+        link="https://example.com/r",
+        ingredients="flour",
+        properties=props,
+    )
+    assert not recipe_missing_metadata(recipe_ok, schema)
 
 
 def test_is_blank_metadata_value() -> None:
@@ -218,12 +228,15 @@ def test_run_ingredients_backfill_counts_scrape_errors() -> None:
 def test_recipe_has_invalid_dinner_category() -> None:
     schema = _full_schema()
     dessert_wrong = _recipe(meal="Dessert")
-    dessert_wrong.properties["Dinner Category"] = ["N/A"]
+    dessert_wrong.properties["Dinner Category"] = ["Pasta"]
+    dessert_ok = _recipe(meal="Dessert")
+    dessert_ok.properties["Dinner Category"] = ["N/A"]
     dinner_ok = _recipe(meal="Dinner")
     dinner_ok.properties["Dinner Category"] = ["Pasta"]
     assert recipe_has_invalid_dinner_category(dessert_wrong, schema)
+    assert not recipe_has_invalid_dinner_category(dessert_ok, schema)
     assert not recipe_has_invalid_dinner_category(dinner_ok, schema)
-    assert len(recipes_invalid_dinner_category([dessert_wrong, dinner_ok], schema)) == 1
+    assert len(recipes_invalid_dinner_category([dessert_wrong, dessert_ok, dinner_ok], schema)) == 1
 
 
 def test_run_common_metadata_repair_runs_strip_and_backfill() -> None:
@@ -250,15 +263,22 @@ def test_run_common_metadata_repair_runs_strip_and_backfill() -> None:
     backfill_mock.assert_called_once()
 
 
+def test_dessert_with_na_only_dinner_category_not_invalid() -> None:
+    schema = _full_schema()
+    dessert_ok = _recipe(meal="Dessert")
+    dessert_ok.properties["Dinner Category"] = ["N/A"]
+    assert not recipe_has_invalid_dinner_category(dessert_ok, schema)
+
+
 def test_run_strip_invalid_dinner_categories() -> None:
     schema = _full_schema()
     db = MagicMock()
     db.schema = schema
     dessert_wrong = _recipe(meal="Dessert")
-    dessert_wrong.properties["Dinner Category"] = ["N/A"]
+    dessert_wrong.properties["Dinner Category"] = ["Pasta"]
     summary = run_strip_invalid_dinner_categories(db, [dessert_wrong])
     assert summary.succeeded == 1
-    db.update_recipe.assert_called_once_with("page-1", {"Dinner Category": []})
+    db.update_recipe.assert_called_once_with("page-1", {"Dinner Category": ["N/A"]})
 
 
 def test_infer_metadata_does_not_overwrite_non_blank_dinner_category() -> None:

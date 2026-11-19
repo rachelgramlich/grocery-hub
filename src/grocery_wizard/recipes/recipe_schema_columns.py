@@ -10,8 +10,10 @@ from src.grocery_wizard.integrations.notion import ColumnInfo, DatabaseSchema
 __all__ = [
     "classification_rules_key",
     "dinner_lunch_category_column_name",
+    "dinner_lunch_category_na_option",
     "diversity_planning_columns",
     "is_dinner_lunch_category_column",
+    "is_dinner_lunch_category_na_only",
 ]
 
 _DINNER_LUNCH_CATEGORY_KEYS = frozenset({"dinnercategory", "dinnerlunchcategory"})
@@ -43,6 +45,28 @@ def dinner_lunch_category_column_name(
 
 def dinner_lunch_category_column_from_schema(schema: DatabaseSchema) -> str | None:
     return dinner_lunch_category_column_name(schema.filter_columns)
+
+
+def dinner_lunch_category_na_option(options: Iterable[str]) -> str | None:
+    """Notion option for not applicable (exact label from schema, usually ``N/A``)."""
+    for opt in options:
+        stripped = opt.strip()
+        if stripped.upper() in {"N/A", "NA"}:
+            return opt
+    return None
+
+
+def is_dinner_lunch_category_na_only(value: object, *, na_label: str) -> bool:
+    if value is None:
+        return False
+    if not isinstance(value, list):
+        text = str(value).strip()
+        return text.upper() in {"N/A", "NA"} or text == na_label
+    items = {str(item).strip() for item in value if str(item).strip()}
+    if len(items) != 1:
+        return False
+    only = next(iter(items))
+    return only == na_label or only.upper() in {"N/A", "NA"}
 
 
 def diversity_planning_columns(schema_columns: dict[str, ColumnInfo]) -> tuple[str, ...]:

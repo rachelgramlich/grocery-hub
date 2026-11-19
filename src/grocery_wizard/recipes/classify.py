@@ -264,9 +264,16 @@ def classify_recipe(
     else:
         meal_value = None
     if meal_value in MEALS_WITHOUT_DINNER_CATEGORY:
-        for key in list(results):
-            if is_dinner_lunch_category_column(key):
-                results.pop(key, None)
+        from src.grocery_wizard.recipes.recipe_schema_columns import dinner_lunch_category_na_option
+
+        for column_name, _column_type, options in filter_columns:
+            if not is_dinner_lunch_category_column(column_name):
+                continue
+            na = dinner_lunch_category_na_option(options)
+            if na:
+                results[column_name] = [na]
+            else:
+                results.pop(column_name, None)
 
     if weeknight_column:
         results[weeknight_column] = is_weeknight_friendly(

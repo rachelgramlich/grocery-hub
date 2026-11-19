@@ -16,7 +16,7 @@ from src.grocery_wizard.integrations.notion import (
     Recipe,
 )
 from src.grocery_wizard.recipes.add_recipe import _weeknight_column_name
-from src.grocery_wizard.recipes.classify import classify_recipe
+from src.grocery_wizard.recipes.classify import MEALS_WITHOUT_DINNER_CATEGORY, classify_recipe
 from src.grocery_wizard.recipes.recipe_image_attach import attach_recipe_cover_image
 from src.grocery_wizard.recipes.recipe_image_resolver import (
     ImageResolveError,
@@ -27,7 +27,11 @@ from src.grocery_wizard.recipes.recipe_meal_plan_stats import (
     filter_columns_for_recipe_classify,
     is_meal_plan_tracking_column,
 )
-from src.grocery_wizard.recipes.recipe_schema_columns import is_dinner_lunch_category_column
+from src.grocery_wizard.recipes.recipe_schema_columns import (
+    dinner_lunch_category_na_option,
+    is_dinner_lunch_category_column,
+    is_dinner_lunch_category_na_only,
+)
 from src.grocery_wizard.recipes.scraper import ScrapeError, ingredients_to_text, scrape_recipe
 from src.grocery_wizard.recipes.weeknight import is_weeknight_friendly
 
@@ -149,7 +153,7 @@ def metadata_filter_columns_for_meals(
             if unknown_meal or meals & _LUNCH_DINNER_MEALS:
                 columns.append(col)
         elif is_dinner_lunch_category_column(col.name):
-            if unknown_meal or meals & {"Dinner", "Lunch"}:
+            if unknown_meal or meals & _LUNCH_DINNER_MEALS or meals & MEALS_WITHOUT_DINNER_CATEGORY:
                 columns.append(col)
         elif key == "tags":
             if unknown_meal or meals != {"Drink"}:
@@ -234,18 +238,29 @@ def dinner_category_column_name(schema: DatabaseSchema) -> str | None:
     return dinner_lunch_category_column_from_schema(schema)
 
 
-def recipe_has_invalid_dinner_category(recipe: Recipe, schema: DatabaseSchema) -> bool:
-    """Dinner/Lunch Category set when Meal is Dessert, Drink, or Breakfast."""
-    from src.grocery_wizard.recipes.classify import MEALS_WITHOUT_DINNER_CATEGORY
-
+def dinner_lunch_category_na_label(schema: DatabaseSchema) -> str | None:
     column = dinner_category_column_name(schema)
     if not column:
+        return None
+    col = schema.all_columns.get(column)
+    if not col:
+        return None
+    return dinner_lunch_category_na_option(col.options)
+
+
+def recipe_has_invalid_dinner_category(recipe: Recipe, schema: DatabaseSchema) -> bool:
+    """Dessert/drink/breakfast rows whose Dinner/Lunch Category is empty or not **N/A**."""
+    column = dinner_category_column_name(schema)
+    na_label = dinner_lunch_category_na_label(schema)
+    if not column or not na_label:
         return False
     meals = meal_values_on_recipe(recipe, schema)
     if not meals or not meals & MEALS_WITHOUT_DINNER_CATEGORY:
         return False
     current = recipe.properties.get(column)
-    return not is_blank_metadata_value("multi_select", current)
+    if is_blank_metadata_value("multi_select", current):
+        return True
+    return not is_dinner_lunch_category_na_only(current, na_label=na_label)
 
 
 def recipes_invalid_dinner_category(
@@ -262,10 +277,11 @@ def run_strip_invalid_dinner_categories(
     on_progress: ProgressCallback | None = None,
     on_fraction: FractionCallback | None = None,
 ) -> BackfillSummary:
-    """Clear Dinner/Lunch Category on dessert, drink, or breakfast (overwrites bad values)."""
+    """Set Dinner/Lunch Category to N/A for dessert, drink, or breakfast."""
     column = dinner_category_column_name(db.schema)
+    na_label = dinner_lunch_category_na_label(db.schema)
     summary = BackfillSummary(scanned=len(candidates))
-    if not column:
+    if not column or not na_label:
         summary.skipped = len(candidates)
         return summary
 
@@ -276,10 +292,10 @@ def run_strip_invalid_dinner_categories(
         if not recipe_has_invalid_dinner_category(recipe, db.schema):
             summary.skipped += 1
             continue
-        db.update_recipe(recipe.page_id, {column: []})
+        db.update_recipe(recipe.page_id, {column: [na_label]})
         summary.succeeded += 1
         if on_progress:
-            on_progress(f"Cleared Dinner/Lunch Category: {recipe.name}")
+            on_progress(f"Set Dinner/Lunch Category to N/A: {recipe.name}")
 
     if on_fraction:
         on_fraction(1.0)
