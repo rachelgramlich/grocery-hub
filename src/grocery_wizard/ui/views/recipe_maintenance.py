@@ -13,6 +13,7 @@ from src.grocery_wizard.integrations.notion_views import (
 )
 from src.grocery_wizard.integrations.nyt_cooking import (
     NYTCookingClient,
+    NytReclassifyChange,
     credentials_status,
     format_reclassify_summary,
     reclassify_nyt_synced_recipes,
@@ -22,6 +23,7 @@ from src.grocery_wizard.recipes.recipe_maintenance import (
     FractionCallback,
     ProgressCallback,
     format_backfill_summary,
+    format_recipe_progress_line,
     recipes_invalid_dinner_category,
     recipes_legacy_protein_none,
     recipes_manual_ingredients_in_notion,
@@ -51,11 +53,25 @@ def _nyt_client_if_configured() -> NYTCookingClient | None:
 
 
 def _write_backfill_progress_line(line: str) -> None:
-    """Render a backfill log line; failed rows use Markdown links into Notion."""
-    if line.startswith("Failed:") and "](https://" in line:
+    """Render a backfill log line; recipe rows use Markdown links into Notion."""
+    if "](https://" in line:
         st.markdown(line)
     else:
         st.write(line)
+
+
+def _format_reclassify_change_line(change: NytReclassifyChange) -> str:
+    recipe = Recipe(
+        page_id=change.page_id,
+        name=change.name,
+        link=None,
+        ingredients=None,
+        properties={},
+    )
+    return (
+        f"{format_recipe_progress_line('', recipe)}: {change.field} "
+        f"{change.old_value} → {change.new_value}"
+    )
 
 
 def _run_backfill_with_progress(
@@ -285,13 +301,10 @@ def render_recipe_maintenance() -> None:
                         on_progress=on_progress,
                     )
                     for line in progress_lines[-40:]:
-                        st.write(line)
+                        _write_backfill_progress_line(line)
                     if summary.changes:
                         for change in summary.changes[:30]:
-                            st.write(
-                                f"{change.name}: {change.field} "
-                                f"{change.old_value} → {change.new_value}"
-                            )
+                            _write_backfill_progress_line(_format_reclassify_change_line(change))
                     outcome = format_reclassify_summary(summary)
                     status.update(label=outcome, state="complete")
                 progress_bar.progress(1.0, text=outcome)

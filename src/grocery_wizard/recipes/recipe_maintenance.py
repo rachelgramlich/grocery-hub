@@ -302,7 +302,7 @@ def run_strip_invalid_dinner_categories(
         db.update_recipe(recipe.page_id, {column: [na_label]})
         summary.succeeded += 1
         if on_progress:
-            on_progress(f"Set Dinner/Lunch Category to N/A: {recipe.name}")
+            on_progress(format_recipe_progress_line("Set Dinner/Lunch Category to N/A: ", recipe))
 
     if on_fraction:
         on_fraction(1.0)
@@ -468,7 +468,7 @@ def run_normalize_protein_none_to_na(
         db.update_recipe(recipe.page_id, {column: updated})
         summary.succeeded += 1
         if on_progress:
-            on_progress(f"Protein None → N/A: {recipe.name}")
+            on_progress(format_recipe_progress_line("Protein None → N/A: ", recipe))
 
     if on_fraction:
         on_fraction(1.0)
@@ -557,9 +557,14 @@ def recipe_notion_markdown_link(recipe: Recipe) -> str:
     return f"[{label}]({notion_page_url(page_id)})"
 
 
+def format_recipe_progress_line(prefix: str, recipe: Recipe, *, suffix: str = "") -> str:
+    """Progress log prefix + linked recipe name + optional suffix (Markdown when page id exists)."""
+    return f"{prefix}{recipe_notion_markdown_link(recipe)}{suffix}"
+
+
 def format_backfill_failed_line(recipe: Recipe, reason: str) -> str:
     """Progress line for a failed recipe row (includes a Notion link when possible)."""
-    return f"Failed: {recipe_notion_markdown_link(recipe)} — {reason}"
+    return format_recipe_progress_line("Failed: ", recipe, suffix=f" — {reason}")
 
 
 def run_ingredients_backfill(
@@ -584,11 +589,11 @@ def run_ingredients_backfill(
         if not url:
             summary.skipped += 1
             if on_progress:
-                on_progress(f"Skipped (no link): {recipe.name}")
+                on_progress(format_recipe_progress_line("Skipped (no link): ", recipe))
             continue
 
         if on_progress:
-            on_progress(f"Scraping ingredients: {recipe.name}")
+            on_progress(format_recipe_progress_line("Scraping ingredients: ", recipe))
 
         try:
             scraped = scrape_recipe(url)
@@ -601,7 +606,9 @@ def run_ingredients_backfill(
         if not scraped.ingredients:
             summary.skipped += 1
             if on_progress:
-                on_progress(f"Skipped (no ingredients on page): {recipe.name}")
+                on_progress(
+                    format_recipe_progress_line("Skipped (no ingredients on page): ", recipe)
+                )
             continue
 
         ingredients_text_value = prepare_ingredients_for_notion(
@@ -614,7 +621,7 @@ def run_ingredients_backfill(
         )
         summary.succeeded += 1
         if on_progress:
-            on_progress(f"Updated ingredients: {recipe.name}")
+            on_progress(format_recipe_progress_line("Updated ingredients: ", recipe))
 
     if on_fraction:
         on_fraction(1.0)
@@ -640,11 +647,11 @@ def run_metadata_backfill(
         if not url:
             summary.skipped += 1
             if on_progress:
-                on_progress(f"Skipped (no link): {recipe.name}")
+                on_progress(format_recipe_progress_line("Skipped (no link): ", recipe))
             continue
 
         if on_progress:
-            on_progress(f"Inferring metadata: {recipe.name}")
+            on_progress(format_recipe_progress_line("Inferring metadata: ", recipe))
 
         try:
             updates = infer_metadata_field_values(db, recipe, nyt_client=nyt_client)
@@ -657,14 +664,16 @@ def run_metadata_backfill(
         if not updates:
             summary.skipped += 1
             if on_progress:
-                on_progress(f"Skipped (nothing to fill): {recipe.name}")
+                on_progress(format_recipe_progress_line("Skipped (nothing to fill): ", recipe))
             continue
 
         db.update_recipe(recipe.page_id, updates)
         summary.succeeded += 1
         detail = ", ".join(f"{key}={value!r}" for key, value in updates.items())
         if on_progress:
-            on_progress(f"Updated metadata: {recipe.name} ({detail})")
+            on_progress(
+                format_recipe_progress_line("Updated metadata: ", recipe, suffix=f" ({detail})")
+            )
 
     if on_fraction:
         on_fraction(1.0)
@@ -696,17 +705,17 @@ def run_image_backfill(
         if not url:
             summary.skipped += 1
             if on_progress:
-                on_progress(f"Skipped (no link): {recipe.name}")
+                on_progress(format_recipe_progress_line("Skipped (no link): ", recipe))
             continue
 
         if recipe_has_cover_image(recipe, schema):
             summary.skipped += 1
             if on_progress:
-                on_progress(f"Skipped (already has image): {recipe.name}")
+                on_progress(format_recipe_progress_line("Skipped (already has image): ", recipe))
             continue
 
         if on_progress:
-            on_progress(f"Resolving cover image: {recipe.name}")
+            on_progress(format_recipe_progress_line("Resolving cover image: ", recipe))
 
         try:
             resolved = resolve_recipe_image_url(url)
@@ -720,8 +729,11 @@ def run_image_backfill(
             summary.succeeded += 1
             if on_progress:
                 on_progress(
-                    f"Would upload: {recipe.name} [{resolved.host}/{resolved.method}] "
-                    f"→ {resolved.image_url}"
+                    format_recipe_progress_line(
+                        "Would upload: ",
+                        recipe,
+                        suffix=(f" [{resolved.host}/{resolved.method}] → {resolved.image_url}"),
+                    )
                 )
             continue
 
@@ -735,7 +747,13 @@ def run_image_backfill(
         if result.ok:
             summary.succeeded += 1
             if on_progress:
-                on_progress(f"Updated image: {recipe.name} ({resolved.host})")
+                on_progress(
+                    format_recipe_progress_line(
+                        "Updated image: ",
+                        recipe,
+                        suffix=f" ({resolved.host})",
+                    )
+                )
         else:
             summary.failed += 1
             if on_progress:
