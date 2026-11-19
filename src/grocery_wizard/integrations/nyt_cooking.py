@@ -700,11 +700,16 @@ class NytCreatedRecipe:
 class NytSyncSummary:
     total: int = 0
     skipped_existing: int = 0
+    updated_existing: int = 0
     created: int = 0
     failed: int = 0
     dry_run: int = 0
     collection_label: str | None = None
     created_recipes: list[NytCreatedRecipe] = field(default_factory=list)
+
+    @property
+    def notion_writes(self) -> int:
+        return self.created + self.updated_existing
 
 
 @dataclass(frozen=True, slots=True)
@@ -839,12 +844,27 @@ def _process_saved_recipe_in_sync(
     existing = db.find_by_link(url)
     if existing:
         summary.skipped_existing += 1
-        _notify_sync_progress(
-            on_progress,
-            f"Skip (already in Notion): {existing.name}",
-            processed=processed,
-            total=recipe_total,
-        )
+        nyt_column = db.nyt_synced_column_name()
+        if (
+            not dry_run
+            and nyt_column
+            and existing.properties.get(nyt_column) is not True
+        ):
+            db.update_recipe(existing.page_id, {nyt_column: True})
+            summary.updated_existing += 1
+            _notify_sync_progress(
+                on_progress,
+                f"Tagged existing (link match): {existing.name}",
+                processed=processed,
+                total=recipe_total,
+            )
+        else:
+            _notify_sync_progress(
+                on_progress,
+                f"Skip (link already in Notion): {existing.name}",
+                processed=processed,
+                total=recipe_total,
+            )
         return
 
     total_minutes, ingredients = _fetch_nyt_recipe_for_sync(client, saved.id, saved.url)
@@ -1003,12 +1023,41 @@ def _sync_report_from_summary(summary: NytSyncSummary) -> dict[str, Any]:
 def format_sync_summary(summary: NytSyncSummary) -> str:
     """One-line counts after a sync or dry run."""
     return (
-        f"Sync complete: {summary.total} in NYT, "
-        f"{summary.skipped_existing} already in Notion, "
-        f"{summary.created} created, "
+        f"Sync complete: {summary.total} in NYT folder, "
+        f"{summary.skipped_existing} matched existing Notion link(s), "
+        f"{summary.created} new page(s) created, "
+        f"{summary.updated_existing} existing page(s) tagged, "
         f"{summary.dry_run} would add, "
         f"{summary.failed} failed."
     )
+
+
+def format_notion_sync_outcome_message(summary: NytSyncSummary) -> tuple[str, str]:
+    """Return (streamlit_message_kind, user-facing sentence) after a live sync."""
+    if summary.created and summary.updated_existing:
+        return (
+            "success",
+            f"Notion updated — added {summary.created} new recipe(s) and tagged "
+            f"{summary.updated_existing} existing match(es) with the NYT sync checkbox.",
+        )
+    if summary.created:
+        return ("success", f"Notion updated — added {summary.created} new recipe(s).")
+    if summary.updated_existing:
+        return (
+            "success",
+            f"Notion updated — tagged {summary.updated_existing} existing recipe(s) "
+            f"(link already in Notion; no new pages).",
+        )
+    if summary.skipped_existing:
+        return (
+            "info",
+            f"No Notion changes — all {summary.skipped_existing} recipe(s) already had a "
+            "matching link and NYT sync checkbox. New NYT saves only create Notion pages when "
+            "the cooking.nytimes.com URL is not already on a card.",
+        )
+    if summary.failed:
+        return ("warning", f"Sync finished with {summary.failed} failure(s) and no new pages.")
+    return ("info", "Sync finished — no recipes were processed.")
 
 
 def run_recipe_box_sync(
@@ -1127,6 +1176,7 @@ def save_sync_report(summary: NytSyncSummary, path: Path = NYT_LAST_SYNC_PATH) -
         "counts": {
             "total": summary.total,
             "skipped_existing": summary.skipped_existing,
+            "updated_existing": summary.updated_existing,
             "created": summary.created,
             "dry_run": summary.dry_run,
             "failed": summary.failed,

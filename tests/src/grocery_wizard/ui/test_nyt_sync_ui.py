@@ -65,5 +65,5 @@ def test_nyt_dry_run_defaults_off_and_clarifies_notion_outcome() -> None:
     assert 'key="nyt_sync_dry_run"' in nyt_sync
     assert "value=False" in nyt_sync
     assert "Dry run finished — Notion was not updated." in nyt_sync
-    assert "Notion updated — added" in nyt_sync
-    assert "Notion updated — no new recipes were needed" in nyt_sync
+    assert "format_notion_sync_outcome_message" in nyt_sync
+    assert "summary.notion_writes" in nyt_sync
