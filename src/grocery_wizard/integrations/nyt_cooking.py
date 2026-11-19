@@ -1037,23 +1037,29 @@ def format_notion_sync_outcome_message(summary: NytSyncSummary) -> tuple[str, st
     if summary.created and summary.updated_existing:
         return (
             "success",
-            f"Notion updated — added {summary.created} new recipe(s) and tagged "
-            f"{summary.updated_existing} existing match(es) with the NYT sync checkbox.",
+            (
+                f"Notion updated — added {summary.created} new recipe(s) and tagged "
+                f"{summary.updated_existing} existing match(es) with the NYT sync checkbox."
+            ),
         )
     if summary.created:
         return ("success", f"Notion updated — added {summary.created} new recipe(s).")
     if summary.updated_existing:
         return (
             "success",
-            f"Notion updated — tagged {summary.updated_existing} existing recipe(s) "
-            f"(link already in Notion; no new pages).",
+            (
+                f"Notion updated — tagged {summary.updated_existing} existing recipe(s) "
+                f"(link already in Notion; no new pages)."
+            ),
         )
     if summary.skipped_existing:
         return (
             "info",
-            f"No Notion changes — all {summary.skipped_existing} recipe(s) already had a "
-            "matching link and NYT sync checkbox. New NYT saves only create Notion pages when "
-            "the cooking.nytimes.com URL is not already on a card.",
+            (
+                f"No Notion changes — all {summary.skipped_existing} recipe(s) already had a "
+                "matching link and NYT sync checkbox. New NYT saves only create Notion pages when "
+                "the cooking.nytimes.com URL is not already on a card."
+            ),
         )
     if summary.failed:
         return ("warning", f"Sync finished with {summary.failed} failure(s) and no new pages.")
