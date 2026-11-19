@@ -44,6 +44,18 @@ def test_weeknight_uses_prep_plus_cook_when_total_includes_marinating() -> None:
     )
 
 
+def test_weeknight_uses_cook_when_prep_includes_long_passive_marinating() -> None:
+    """NYT prep often counts marinating; cook alone reflects stove time."""
+    assert weeknight_timing_minutes(total_minutes=90, prep_minutes=50, cook_minutes=25) == 25
+    assert is_weeknight_friendly(
+        "Bulgogi-Style Tofu",
+        meal="Dinner",
+        total_minutes=90,
+        prep_minutes=50,
+        cook_minutes=25,
+    )
+
+
 def test_weeknight_true_from_title_heuristic() -> None:
     assert is_weeknight_friendly("Sheet Pan Chicken", meal="Dinner")
     assert is_weeknight_friendly("One-Pot Pasta", meal="Dinner")
