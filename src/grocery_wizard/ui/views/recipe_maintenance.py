@@ -23,6 +23,7 @@ from src.grocery_wizard.recipes.recipe_maintenance import (
     ProgressCallback,
     format_backfill_summary,
     recipes_invalid_dinner_category,
+    recipes_legacy_protein_none,
     recipes_manual_ingredients_in_notion,
     recipes_missing_cover_images,
     recipes_missing_ingredients,
@@ -133,6 +134,7 @@ def render_recipe_maintenance() -> None:
     missing_ingredients = recipes_missing_ingredients(recipes, schema)
     missing_metadata = recipes_missing_metadata(recipes, schema)
     invalid_dinner_category = recipes_invalid_dinner_category(recipes, schema)
+    legacy_protein_none = recipes_legacy_protein_none(recipes, schema)
     missing_images = recipes_missing_cover_images(recipes, schema)
     manual_ingredients = recipes_manual_ingredients_in_notion(recipes, schema)
     possibly_missing_checkboxes = recipes_possibly_missing_all_checkboxes(recipes, schema)
@@ -152,7 +154,9 @@ def render_recipe_maintenance() -> None:
     if nyt_col:
         nyt_synced_count = sum(1 for r in recipes if r.properties.get(nyt_col))
 
-    repair_disabled = not invalid_dinner_category and not missing_metadata
+    repair_disabled = (
+        not invalid_dinner_category and not legacy_protein_none and not missing_metadata
+    )
 
     with st.container(border=True):
         st.markdown("**Standard metadata repair**")
@@ -161,11 +165,12 @@ def render_recipe_maintenance() -> None:
             "**None** → **N/A**, then 3) backfill any other empty metadata."
         )
         st.write(
-            f"**{len(invalid_dinner_category)}** to strip · "
-            f"**{len(missing_metadata)}** with empty fields to fill"
+            f"**{len(invalid_dinner_category)}** bad dinner/lunch category · "
+            f"**{len(legacy_protein_none)}** Protein None · "
+            f"**{len(missing_metadata)}** empty metadata"
         )
         if st.button(
-            "Run standard repair (strip + backfill)",
+            "Run standard repair",
             type="primary",
             key="recipe_maint_standard_repair",
             disabled=repair_disabled,
@@ -183,23 +188,16 @@ def render_recipe_maintenance() -> None:
                     on_progress=on_progress,
                     on_fraction=on_fraction,
                 )
+                parts = [
+                    combined.strip,
+                    combined.protein_none_to_na,
+                    combined.backfill,
+                ]
                 return BackfillSummary(
-                    scanned=(
-                        (combined.strip.scanned if combined.strip else 0)
-                        + (combined.backfill.scanned if combined.backfill else 0)
-                    ),
-                    succeeded=(
-                        (combined.strip.succeeded if combined.strip else 0)
-                        + (combined.backfill.succeeded if combined.backfill else 0)
-                    ),
-                    failed=(
-                        (combined.strip.failed if combined.strip else 0)
-                        + (combined.backfill.failed if combined.backfill else 0)
-                    ),
-                    skipped=(
-                        (combined.strip.skipped if combined.strip else 0)
-                        + (combined.backfill.skipped if combined.backfill else 0)
-                    ),
+                    scanned=sum(p.scanned for p in parts if p),
+                    succeeded=sum(p.succeeded for p in parts if p),
+                    failed=sum(p.failed for p in parts if p),
+                    skipped=sum(p.skipped for p in parts if p),
                 )
 
             _run_backfill_with_progress(
@@ -240,13 +238,22 @@ def render_recipe_maintenance() -> None:
                 runner=_strip_runner,
             )
 
-    if nyt_client is not None and nyt_col:
-        with st.container(border=True):
-            st.markdown("**Reclassify NYT-synced recipes**")
-            st.caption(
-                "Re-runs Meal, Weeknight Friendly, and dinner/lunch category rules on rows marked "
-                "synced from NYT (overwrites when the classifier disagrees; clears bad categories)."
+    with st.container(border=True):
+        st.markdown("**Reclassify NYT-synced recipes**")
+        st.caption(
+            "For rows with **Synced from NYT recipe box** checked: re-infers **Meal** from title "
+            "and ingredients, **Weeknight Friendly** from NYT cook time, and sets "
+            "**Dinner/Lunch Category** to **N/A** on desserts/drinks/breakfast. "
+            "**Overwrites** existing values when the classifier disagrees (unlike standard repair, "
+            "which only fixes rule-invalid dinner/lunch tags and empty cells)."
+        )
+        if not nyt_col:
+            st.info(
+                "Add a **Synced from NYT recipe box** checkbox in Notion to use this step."
             )
+        elif nyt_client is None:
+            st.info("Set NYT credentials in `.env` to fetch cook times and run reclassify.")
+        else:
             st.write(f"**{nyt_synced_count}** NYT-synced recipe(s) in Notion.")
             reclassify_dry = st.checkbox(
                 "Dry run (log changes only)",
@@ -290,10 +297,6 @@ def render_recipe_maintenance() -> None:
                     or summary.weeknight_cleared
                 ):
                     invalidate_recipes_after_write(schema_may_change=True)
-    elif not credentials_status()["configured"]:
-        with st.container(border=True):
-            st.markdown("**Reclassify NYT-synced recipes**")
-            st.caption("Set NYT credentials in `.env` to re-run classification on synced rows.")
 
     st.markdown("### Automatic backfill")
 
