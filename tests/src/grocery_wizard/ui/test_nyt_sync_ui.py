@@ -42,7 +42,7 @@ def test_list_recipe_box_folders_omits_all_saved_recipes_option() -> None:
     assert 'label="All saved recipes"' not in nyt_sync
     assert "All saved recipes" not in nyt_cooking
     assert '_PREFERRED_NYT_FOLDER_LABELS = ("To make", "Favorites")' in nyt_cooking
-    assert 'Recipe box organization' in nyt_sync
+    assert "Recipe box organization" in nyt_sync
 
 
 def test_nyt_sync_shows_progress_bar_during_run() -> None:
