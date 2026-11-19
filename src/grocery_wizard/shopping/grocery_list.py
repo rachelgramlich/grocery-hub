@@ -13,6 +13,8 @@ Grocery list pipeline (dev/debug failure points):
 
 from __future__ import annotations
 
+import html as html_module
+
 __all__ = [
     "NAME_LINK_STALE_VERIFY_MESSAGE",
     "NameLinkMismatch",
@@ -23,6 +25,7 @@ __all__ = [
     "format_grocery_items_copy_text",
     "format_item_provenance",
     "format_meals_and_grocery_list",
+    "format_meals_copy_html",
     "format_meals_copy_text",
     "format_name_link_mismatch_warning",
     "merge_grocery_items",
@@ -431,14 +434,33 @@ def _is_milk_merge_target(key: str) -> bool:
 
 
 def format_meals_copy_text(meals: list[tuple[str, str | None]]) -> str:
-    """Meals block for copy/export (bullets only — no section title line)."""
+    """Meals block for copy/export (bullets only — no section title line).
+
+    URLs sit on their own indented line so Apple Notes and similar apps detect
+    tappable links after plain-text paste.
+    """
     lines: list[str] = []
     for name, link in meals:
         if link:
-            lines.append(f"- {name} ({link})")
+            lines.append(f"- {name}")
+            lines.append(f"  {link}")
         else:
             lines.append(f"- {name}")
     return "\n".join(lines)
+
+
+def format_meals_copy_html(meals: list[tuple[str, str | None]]) -> str:
+    """Minimal HTML for meals copy (named recipe links for rich paste)."""
+    parts = ["<ul>"]
+    for name, link in meals:
+        safe_name = html_module.escape(name)
+        if link:
+            safe_href = html_module.escape(link, quote=True)
+            parts.append(f'<li><a href="{safe_href}">{safe_name}</a></li>')
+        else:
+            parts.append(f"<li>{safe_name}</li>")
+    parts.append("</ul>")
+    return "".join(parts)
 
 
 def format_grocery_items_copy_text(grocery_items: list[str]) -> str:

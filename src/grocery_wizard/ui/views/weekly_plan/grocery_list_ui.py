@@ -13,6 +13,7 @@ from src.grocery_wizard.shopping.grocery_list import (
     align_item_provenance_with_items,
     format_grocery_items_copy_text,
     format_item_provenance,
+    format_meals_copy_html,
     format_meals_copy_text,
 )
 from src.grocery_wizard.shopping.grocery_list_edits import (
@@ -347,7 +348,10 @@ def _render_grocery_result() -> None:
         grocery_copy_text = format_grocery_items_copy_text(final_items)
 
         st.markdown("### Copy list")
-        st.caption("Edit below, then copy meals and groceries.")
+        st.caption(
+            "Edit below if needed. Use **Copy meals** for Apple Notes (tappable recipe links). "
+            "Use **Copy list** for groceries."
+        )
         st.markdown("**Meals**")
         meals_fingerprint = tuple(meals)
         if st.session_state.get("meals_final_list_fingerprint") != meals_fingerprint:
@@ -364,6 +368,11 @@ def _render_grocery_result() -> None:
             meals_for_copy,
             label="Copy meals",
             key="meals_copy",
+            html_clipboard=format_meals_copy_html(meals),
+            caption=(
+                "**Copy meals** puts plain text plus rich links on the clipboard (best for Notes). "
+                "Select-all in the box above copies plain text only."
+            ),
         )
 
         st.markdown("**Grocery list**")

@@ -10,6 +10,7 @@ from src.grocery_wizard.integrations.notion import Recipe, notion_page_url, reci
 from src.grocery_wizard.shopping.grocery_list import (
     format_grocery_items_copy_text,
     format_meals_and_grocery_list,
+    format_meals_copy_html,
     format_meals_copy_text,
 )
 from src.grocery_wizard.shopping.grocery_list_edits import compute_grocery_drafts
@@ -90,7 +91,15 @@ def test_meal_entries_with_links_uses_notion_when_link_blank() -> None:
         ),
     ]
     meals = meal_entries_with_links(["No Link Recipe"], recipes)
-    assert format_meals_copy_text(meals) == (f"- No Link Recipe ({notion_page_url(page_id)})")
+    url = notion_page_url(page_id)
+    assert format_meals_copy_text(meals) == (f"- No Link Recipe\n  {url}")
+
+
+def test_format_meals_copy_html_uses_named_anchors() -> None:
+    meals = [("Soup", "https://example.com/soup"), ("Salad", None)]
+    html = format_meals_copy_html(meals)
+    assert '<a href="https://example.com/soup">Soup</a>' in html
+    assert "<li>Salad</li>" in html
 
 
 def test_copy_text_excludes_section_header_lines() -> None:
@@ -100,7 +109,7 @@ def test_copy_text_excludes_section_header_lines() -> None:
     meals_copy = format_meals_copy_text(meals)
     grocery_copy = format_grocery_items_copy_text(grocery_items)
 
-    assert meals_copy == "- Soup (https://example.com/soup)"
+    assert meals_copy == "- Soup\n  https://example.com/soup"
     assert "Meals" not in meals_copy.splitlines()
     assert grocery_copy == "- onions\n- milk"
     assert "Grocery List" not in grocery_copy.splitlines()
