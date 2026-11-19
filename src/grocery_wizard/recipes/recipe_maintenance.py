@@ -227,7 +227,7 @@ def dinner_category_column_name(schema: DatabaseSchema) -> str | None:
 
 
 def recipe_has_invalid_dinner_category(recipe: Recipe, schema: DatabaseSchema) -> bool:
-    """Dinner Category set when Meal is Dessert, Drink, or Breakfast."""
+    """Dinner/Lunch Category set when Meal is Dessert, Drink, or Breakfast."""
     from src.grocery_wizard.recipes.classify import MEALS_WITHOUT_DINNER_CATEGORY
 
     column = dinner_category_column_name(schema)
@@ -254,7 +254,7 @@ def run_strip_invalid_dinner_categories(
     on_progress: ProgressCallback | None = None,
     on_fraction: FractionCallback | None = None,
 ) -> BackfillSummary:
-    """Clear Dinner Category when Meal is Dessert, Drink, or Breakfast (overwrites bad values)."""
+    """Clear Dinner/Lunch Category on dessert, drink, or breakfast (overwrites bad values)."""
     column = dinner_category_column_name(db.schema)
     summary = BackfillSummary(scanned=len(candidates))
     if not column:
@@ -271,7 +271,7 @@ def run_strip_invalid_dinner_categories(
         db.update_recipe(recipe.page_id, {column: []})
         summary.succeeded += 1
         if on_progress:
-            on_progress(f"Cleared Dinner Category: {recipe.name}")
+            on_progress(f"Cleared Dinner/Lunch Category: {recipe.name}")
 
     if on_fraction:
         on_fraction(1.0)

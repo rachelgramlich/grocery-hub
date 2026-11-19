@@ -12,6 +12,7 @@ from src.grocery_wizard.recipes.recipe_schema_columns import (
 def test_is_dinner_lunch_category_column_accepts_renamed_notion_column() -> None:
     assert is_dinner_lunch_category_column("Dinner Category")
     assert is_dinner_lunch_category_column("Dinner/lunch category")
+    assert is_dinner_lunch_category_column("Dinner/Lunch Category")
 
 
 def test_classify_column_uses_rules_for_dinner_lunch_category() -> None:

@@ -22,7 +22,7 @@ def column_name_key(name: str) -> str:
 
 
 def is_dinner_lunch_category_column(name: str) -> bool:
-    """True for **Dinner Category**, **Dinner/lunch category**, and close variants."""
+    """True for **Dinner Category**, **Dinner/Lunch Category**, and close variants."""
     return column_name_key(name) in _DINNER_LUNCH_CATEGORY_KEYS
 
 
@@ -46,7 +46,7 @@ def dinner_lunch_category_column_from_schema(schema: DatabaseSchema) -> str | No
 
 
 def diversity_planning_columns(schema_columns: dict[str, ColumnInfo]) -> tuple[str, ...]:
-    """Protein, dinner/lunch category column (if present), and Cuisine — meal-plan variety."""
+    """Protein, dinner/lunch category (if present), and Cuisine — dinner and lunch variety."""
     names: list[str] = []
     if "Protein" in schema_columns:
         names.append("Protein")

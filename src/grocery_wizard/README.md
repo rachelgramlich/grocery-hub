@@ -149,7 +149,7 @@ Use **`just grocery-ui`** for weekly planning. Default filters in the UI match t
 | Meal | Dinner |
 | Dinner: Weeknight Friendly | yes |
 
-Suggestions maximize variety across **Protein**, **Dinner Category**, and **Cuisine**. Plans are stored in Notion; the app also writes `{"recipes": ["Name1", ...]}` to `.local/grocery_wizard/week_plan.json` for session hints.
+Suggestions maximize variety across **Protein**, **Dinner/Lunch Category** (for dinner and lunch meals), and **Cuisine**. Plans are stored in Notion; the app also writes `{"recipes": ["Name1", ...]}` to `.local/grocery_wizard/week_plan.json` for session hints.
 
 Optional **Recipes** database columns (add manually in Notion; override names via env if needed):
 
@@ -254,7 +254,7 @@ Key columns:
 | Meal | select | Breakfast, Lunch, Dinner, … |
 | Protein | multi_select | Chicken, Fish, Beans, … |
 | Cuisine | multi_select | Italian, Asian, Mexican, … |
-| Dinner Category | multi_select | Curry, Pasta, Bowl, … |
+| Dinner/Lunch Category | multi_select | Curry, Pasta, Bowl, … (for Dinner and Lunch meals) |
 | Dinner: Weeknight Friendly | checkbox | Meal-planning filter |
 | Synced from NYT recipe box | checkbox | Set automatically by NYT recipe-box sync in the Streamlit app |
 

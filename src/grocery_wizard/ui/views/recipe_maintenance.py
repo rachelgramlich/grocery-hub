@@ -170,9 +170,10 @@ def render_recipe_maintenance() -> None:
     with st.container(border=True):
         st.markdown("**Backfill missing metadata**")
         st.caption(
-            "Fills **empty** Meal, Cuisine, and meal-appropriate filters only — it does **not** "
-            "overwrite values already set (for example Dessert + Dinner/lunch category N/A stays "
-            "wrong until you use the strip action below). Weeknight Friendly applies for dinners. "
+            "Fills **empty** Meal, Cuisine, Protein, and **Dinner/Lunch Category** for **Dinner** "
+            "and **Lunch** (one column). It does **not** overwrite values "
+            "already set (for example Dessert + Dinner/Lunch Category N/A stays wrong until you "
+            "strip below). **Weeknight Friendly** applies only when Meal includes Dinner. "
             "Instructions, NYT sync, and Showstopper are not auto-filled."
         )
         st.write(f"**{len(missing_metadata)}** recipe(s) with gaps in metadata columns.")
@@ -200,9 +201,9 @@ def render_recipe_maintenance() -> None:
             _run_backfill_with_progress(label="Metadata backfill", runner=_metadata_runner)
 
     with st.container(border=True):
-        st.markdown("**Strip Dinner/lunch category on desserts / drinks / breakfast**")
+        st.markdown("**Strip Dinner/Lunch Category on desserts / drinks / breakfast**")
         st.caption(
-            "Clears Dinner/lunch category when Meal is Dessert, Drink, or Breakfast "
+            "Clears Dinner/Lunch Category when Meal is Dessert, Drink, or Breakfast "
             "(fixes mistaken N/A or One-Pot / One-Pan on brownies and similar)."
         )
         st.write(
