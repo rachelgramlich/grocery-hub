@@ -58,8 +58,17 @@ CLASSIFICATION_RULES: dict[str, dict[str, list[str]]] = {
             "pasta",
             "entree",
             "main course",
+            "bowl",
         ],
-        "Snack/Side": ["snack", "appetizer", "dip", "bite", "side dish"],
+        "Snack/Side": [
+            "snack",
+            "appetizer",
+            "dip",
+            "bite",
+            "side dish",
+            "focaccia",
+            "brussels sprout",
+        ],
         "Dessert": [
             "dessert",
             "cake",
@@ -145,10 +154,15 @@ SAVORY_MEAL_BLOCKERS = re.compile(
     r"gnocchi|chile crisp|potpie|pot pie|samosa|quesadilla|taco|tofu|chicken|"
     r"beans|pasta|soup|stew|noodles|burrito|enchilada|lasagna|curry|"
     r"couscous|flatbread|fritters|meatball|satay|bibimbap|kimbap|adobo|ratatouille|"
-    r"scallop|salmon|shrimp|halloumi|skewer|dumpling|tomato tart|potpie"
+    r"scallop|salmon|shrimp|halloumi|skewer|dumpling|tomato tart|potpie|"
+    r"paneer|tikka|aloo|gobi|orzo|fried rice|spaghetti squash"
     r")\b",
     re.IGNORECASE,
 )
+
+SHEET_PAN_PATTERN = re.compile(r"\b(sheet[- ]pan|one[- ](?:pot|pan))\b", re.IGNORECASE)
+
+_MEALS_WITHOUT_DINNER_CATEGORY: frozenset[str] = frozenset({"Dessert", "Drink", "Breakfast"})
 
 DESSERT_PATTERN = re.compile(
     r"\b("
@@ -237,6 +251,12 @@ def classify_recipe(
     meal = results.get("Meal")
     if meal is None:
         meal = classify_column("Meal", title, ingredients, allowed_options=meal_options)
+        if meal is not None:
+            results["Meal"] = [meal] if isinstance(meal, str) else meal
+
+    meal_value = meal if isinstance(meal, str) else (meal[0] if isinstance(meal, list) and meal else None)
+    if meal_value in _MEALS_WITHOUT_DINNER_CATEGORY:
+        results.pop("Dinner Category", None)
 
     if weeknight_column:
         results[weeknight_column] = is_weeknight_friendly(
@@ -292,6 +312,9 @@ def _classify_meal_structured(text: str) -> str | None:
 
     if SALAD_PATTERN.search(text):
         return "Snack/Side"
+
+    if SHEET_PAN_PATTERN.search(text):
+        return "Dinner"
 
     if _score_keywords(CLASSIFICATION_RULES["meal"]["Snack/Side"], text) > 0:
         return "Snack/Side"

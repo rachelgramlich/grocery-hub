@@ -1205,6 +1205,16 @@ def _require_nyt_synced_column(db: Any) -> str:
     return nyt_column
 
 
+def _reclassify_ingredient_lines(recipe: Any) -> list[str]:
+    from src.grocery_wizard.ingredients.sync import parse_ingredients_text
+
+    raw = (recipe.ingredients or "").replace("<br />", "\n").replace("<br>", "\n")
+    lines, _ = parse_ingredients_text(raw)
+    if lines:
+        return lines
+    return [line.strip() for line in raw.splitlines() if line.strip()]
+
+
 def _weeknight_column_for_reclassify(db: Any) -> str:
     # Lazy import: weeknight defaults live in recipes package (avoid import at module load).
     from src.grocery_wizard.recipes.weeknight import DEFAULT_WEEKNIGHT_COLUMN
@@ -1336,7 +1346,11 @@ def reclassify_nyt_synced_recipes(
 
         summary.total += 1
         title = recipe.name
-        inferred = classify_recipe(title, [], filter_columns)
+        inferred = classify_recipe(
+            title,
+            _reclassify_ingredient_lines(recipe),
+            filter_columns,
+        )
         new_meal = inferred.get("Meal")
         old_meal = recipe.properties.get("Meal")
 

@@ -170,3 +170,35 @@ def test_weeknight_friendly_from_title_heuristics() -> None:
     assert is_weeknight_friendly("One-Pot Chermoula Shrimp and Orzo", meal="Dinner") is True
     assert is_weeknight_friendly("Sheet Pan Chicken", meal="Dinner") is True
     assert is_weeknight_friendly("Classic Beef Bourguignon", meal="Dinner") is False
+
+
+def test_classify_recipe_omits_dinner_category_for_dessert() -> None:
+    dinner_opts = ["Pasta", "One-Pot / One-Pan", "N/A"]
+    result = classify_recipe(
+        "Skillet Brownie With Chocolate Ganache Frosting",
+        [],
+        [
+            ("Meal", "multi_select", MEAL_OPTIONS),
+            ("Dinner Category", "multi_select", dinner_opts),
+        ],
+    )
+    assert result["Meal"] == ["Dessert"]
+    assert "Dinner Category" not in result
+
+
+def test_classify_recipe_sheet_pan_paneer_is_dinner() -> None:
+    result = classify_recipe(
+        "Sheet-Pan Paneer Tikka",
+        ["paneer", "garam masala"],
+        [("Meal", "multi_select", MEAL_OPTIONS)],
+    )
+    assert result["Meal"] == ["Dinner"]
+
+
+def test_classify_recipe_focaccia_is_snack_side() -> None:
+    result = classify_recipe(
+        "Focaccia",
+        ["flour", "yeast"],
+        [("Meal", "multi_select", MEAL_OPTIONS)],
+    )
+    assert result["Meal"] == ["Snack/Side"]
