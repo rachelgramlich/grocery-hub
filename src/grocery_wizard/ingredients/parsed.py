@@ -28,15 +28,22 @@ from ingredient_parser import parse_ingredient
 
 from src.grocery_wizard.ingredients._cleaning import (
     mask_parenthetical_groups,
-    normalize_measurement_text,
     strip_parenthetical_groups,
 )
 from src.grocery_wizard.ingredients._patterns import (
     _AMOUNT_STR_RE,
     _BOXED_DRIED_FRUIT_NAME_RE,
     _LEADING_QTY_RE,
-    _UNICODE_DASHES,
-    _UNICODE_FRACTIONS,
+)
+from src.grocery_wizard.ingredients.ingredient_unicode import (
+    _normalize_unicode,
+    _normalize_unicode_for_storage,
+)
+from src.grocery_wizard.ingredients.junk import is_junk_ingredient
+from src.grocery_wizard.ingredients.line_strips import (
+    _strip_leading_to_prefix,
+    _strip_optional_prefix,
+    _strip_or_prefix,
 )
 from src.grocery_wizard.ingredients.nltk_bootstrap import ensure_nltk_data
 
@@ -69,7 +76,7 @@ _VOLUME_UNITS = frozenset(
         "kilogram",
         "kilograms",
         "kg",
-    }
+    },
 )
 
 _COUNT_UNITS = frozenset(
@@ -119,7 +126,7 @@ _COUNT_UNITS = frozenset(
         "pounds",
         "lb",
         "lbs",
-    }
+    },
 )
 
 _PRESERVED_PRODUCTS = (
@@ -294,7 +301,7 @@ _OR_ALTERNATIVE_RE = re.compile(r"\s+or\s+", re.IGNORECASE)
 _INLINE_OZ_CAN_RE = re.compile(r"\d+\s*oz\s+(can|cans)\b", re.IGNORECASE)
 
 _WEIGHT_UNITS_STRIP_AT_STORAGE = frozenset(
-    {"oz", "ounce", "ounces", "g", "gram", "grams", "kg", "kilogram", "kilograms"}
+    {"oz", "ounce", "ounces", "g", "gram", "grams", "kg", "kilogram", "kilograms"},
 )
 
 
@@ -411,34 +418,6 @@ def is_nyt_cooking_url(url: str | None) -> bool:
     return host.endswith("cooking.nytimes.com") or (
         "nytimes.com" in host and "/recipes/" in parsed.path
     )
-
-
-def _normalize_unicode_read(text: str) -> str:
-    """Unicode dashes/fractions only (grocery read / parse stored lines)."""
-    for dash in _UNICODE_DASHES:
-        text = text.replace(dash, "-")
-    for char, replacement in _UNICODE_FRACTIONS.items():
-        text = text.replace(char, replacement)
-    return text
-
-
-def _normalize_unicode_for_storage(text: str) -> str:
-    """Storage pipeline: also strip dual measures (``cup/240 grams``), packed, typos, etc."""
-    return normalize_measurement_text(_normalize_unicode_read(text))
-
-
-def _normalize_unicode(text: str) -> str:
-    return _normalize_unicode_read(text)
-
-
-def _strip_optional_prefix(text: str) -> str:
-    return re.sub(r"^optional:\s*", "", text, flags=re.IGNORECASE).strip()
-
-
-def _strip_or_prefix(text: str) -> str:
-    if text.lower().startswith("or "):
-        return text[3:].strip()
-    return text
 
 
 def _fraction_to_float(value: Fraction | str | float | int | None) -> float | None:
@@ -671,7 +650,7 @@ def _is_garlic_clove_unit(unit: str | None, name: str) -> bool:
 def garlic_clove_count_from_line(line: str) -> float | None:
     """Return the clove count from a raw garlic-clove ingredient line, if any."""
     text = _strip_parenthetical_notes(
-        _strip_or_prefix(_strip_optional_prefix(_normalize_unicode(line.strip())))
+        _strip_or_prefix(_strip_optional_prefix(_normalize_unicode(line.strip()))),
     )
     if not text:
         return None
@@ -751,21 +730,25 @@ def _is_alternative_list_name(name: str) -> bool:
 
 def _keeps_or_alternative_phrasing(name: str) -> bool:
     return bool(re.search(r"\s+or\s+", name, re.IGNORECASE)) and not re.search(
-        r"\bor\b.*\b(?:stock|broth)\b", name, re.IGNORECASE
+        r"\bor\b.*\b(?:stock|broth)\b",
+        name,
+        re.IGNORECASE,
     )
 
 
 def _simplify_parsed_name(name: str) -> str:
     stripped = name.strip()
     keep_or_options = _is_alternative_list_name(stripped) or _keeps_or_alternative_phrasing(
-        stripped
+        stripped,
     )
     if keep_or_options:
         cleaned = strip_parenthetical_groups(stripped)
         cleaned = _strip_more_modifiers(cleaned)
         cleaned = _TRAILING_MORE_RE.sub("", cleaned).strip(" ,")
         if cleaned.lower().startswith("fresh ") and not re.search(
-            r"\bfresh\s+or\s+", cleaned, re.IGNORECASE
+            r"\bfresh\s+or\s+",
+            cleaned,
+            re.IGNORECASE,
         ):
             cleaned = cleaned[6:].strip()
         return _prefer_stock_over_water(cleaned)
@@ -1150,7 +1133,7 @@ def _is_celery_stalk_unit(unit: str, name: str) -> bool:
 def _should_preserve_raw_line(line: str) -> bool:
     stripped = _strip_more_modifiers(line.strip())
     return bool(
-        _SUBSTITUTION_PAREN_RE.search(stripped) or stripped.startswith(("[x]", "▢", "•", "*"))
+        _SUBSTITUTION_PAREN_RE.search(stripped) or stripped.startswith(("[x]", "▢", "•", "*")),
     )
 
 
@@ -1166,21 +1149,22 @@ def _strip_trailing_prep_commas(text: str) -> str:
 
 
 _DESCRIPTOR_WORDS = frozenset(
-    {"curly", "tuscan", "loosely", "firmly", "ripe", "coarsely", "packed"}
+    {"curly", "tuscan", "loosely", "firmly", "ripe", "coarsely", "packed"},
 )
 
 _LEADING_CLEAR_SPRINKLE_RE = re.compile(
-    r"^clear\s+(?=(?:coarse|sanding|sparkling|decorating)\b)", re.IGNORECASE
+    r"^clear\s+(?=(?:coarse|sanding|sparkling|decorating)\b)",
+    re.IGNORECASE,
 )
 
 _LEADING_COLD_RE = re.compile(r"^cold\s+(?!foam\b|brew\b|cuts?\b|press)", re.IGNORECASE)
 
 _SIZE_WORDS = frozenset(
-    {"large", "medium", "small", "extra-large", "extra", "jumbo", "baby", "thin", "thick"}
+    {"large", "medium", "small", "extra-large", "extra", "jumbo", "baby", "thin", "thick"},
 )
 
 _DESCRIPTOR_COUNT_UNITS = frozenset(
-    {"stalk", "stalks", "clove", "cloves", "can", "cans", "head", "heads", "bunch", "bunches"}
+    {"stalk", "stalks", "clove", "cloves", "can", "cans", "head", "heads", "bunch", "bunches"},
 )
 
 
@@ -1285,7 +1269,7 @@ def _build_storage_line(
     raw_context = source_line or original
     context = _strip_more_modifiers(raw_context)
     lemon_or_lime = _stored_lemon_or_lime_choice(raw_context) or _stored_lemon_or_lime_choice(
-        original
+        original,
     )
     if lemon_or_lime:
         return lemon_or_lime
@@ -1315,7 +1299,9 @@ def _build_storage_line(
 
     if _LEMON_LINE_RE.match(original.strip()) or citrus_plural or name in {"lemons", "limes"}:
         if re.search(r"\bzest\b", context, re.IGNORECASE) or re.search(
-            r"\bjuice\b", context, re.IGNORECASE
+            r"\bjuice\b",
+            context,
+            re.IGNORECASE,
         ):
             return ""
         fruit = citrus_plural or (name if name in {"lemons", "limes"} else "lemons")
@@ -1400,18 +1386,12 @@ _LEADING_INCH_RE = re.compile(
 )
 
 
-def _strip_leading_to_prefix(text: str) -> str:
-    return re.sub(r"^to\s+(?=\d)", "", text, flags=re.IGNORECASE).strip()
-
-
 def format_ingredient_for_storage(line: str) -> str:
     """Parse a raw ingredient line into a cleaned ``{qty} {name}`` string for Notion."""
-    from src.grocery_wizard.ingredients.normalize import is_junk_ingredient
-
     if is_junk_ingredient(line):
         return ""
     text = _strip_leading_to_prefix(
-        _strip_or_prefix(_strip_optional_prefix(_normalize_unicode_for_storage(line.strip())))
+        _strip_or_prefix(_strip_optional_prefix(_normalize_unicode_for_storage(line.strip()))),
     )
     text = _strip_more_modifiers(text)
     if not text:
@@ -1426,7 +1406,7 @@ def format_ingredient_for_storage(line: str) -> str:
     parse_text = _LEADING_INCH_RE.sub("", _strip_parenthetical_notes(text))
     parsed = _parse_with_library(parse_text)
     raw_source = _strip_leading_to_prefix(
-        _strip_or_prefix(_strip_optional_prefix(_normalize_unicode_for_storage(line.strip())))
+        _strip_or_prefix(_strip_optional_prefix(_normalize_unicode_for_storage(line.strip()))),
     )
     return _build_storage_line(parsed, parse_text, source_line=raw_source)
 
@@ -1504,7 +1484,7 @@ def _parse_stored_rest(qty_str: str, rest: str) -> tuple[str, str | None]:
         unit_word = words[-1]
         base = " ".join(words[:-1])
         name = _prefer_plural_form(
-            _strip_size_descriptors(_simplify_parsed_name(f"{base} {unit_word}"))
+            _strip_size_descriptors(_simplify_parsed_name(f"{base} {unit_word}")),
         )
     name = _canonicalize_grocery_name(name)
     if _is_boxed_dried_fruit_name(name):
@@ -1628,7 +1608,9 @@ def parse_stored_ingredient(line: str) -> tuple[str, str | None]:
         return "garlic", None
 
     if _CITRUS_ZEST_LEGACY_RE.match(text) or re.match(
-        r"^(?:finely|freshly\s+grated\s+)?(?:lemon|lime)\s+zest\Z", text, re.IGNORECASE
+        r"^(?:finely|freshly\s+grated\s+)?(?:lemon|lime)\s+zest\Z",
+        text,
+        re.IGNORECASE,
     ):
         fruit = _citrus_plural_from_text(text) or "lemons"
         return fruit, "zest:1"
@@ -1779,10 +1761,7 @@ def _aggregate_garlic_amounts(amounts: list[str | None]) -> str | None:
         except (ValueError, ZeroDivisionError):
             has_bare_garlic = True
 
-    if clove_total > _GARLIC_CLOVE_HEAD_THRESHOLD:
-        clove_heads = 2.0
-    else:
-        clove_heads = 0.0
+    clove_heads = 2.0 if clove_total > _GARLIC_CLOVE_HEAD_THRESHOLD else 0.0
 
     total_heads = max(head_total, clove_heads)
     if total_heads > 0:

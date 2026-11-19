@@ -32,7 +32,6 @@ import re
 from functools import lru_cache
 
 from src.grocery_wizard.ingredients._cleaning import (
-    _is_junk_only,
     _looks_like_ingredient,
     _normalize_unicode_dashes,
     _normalize_unicode_fractions,
@@ -60,6 +59,8 @@ from src.grocery_wizard.ingredients._patterns import (
     _TORTILLA_PREFIXES,
     _UNITS,
 )
+from src.grocery_wizard.ingredients.ingredient_unicode import _normalize_unicode
+from src.grocery_wizard.ingredients.junk import is_junk_ingredient
 from src.grocery_wizard.ingredients.parsed import (  # noqa: F401
     _format_qty,
     aggregate_amounts,
@@ -85,7 +86,7 @@ _CONDIMENT_MEAT_PREFIXES = frozenset(
         "lime",
         "miso",
         "teriyaki",
-    }
+    },
 )
 _OIL_PREFIXES = frozenset(
     {
@@ -97,7 +98,7 @@ _OIL_PREFIXES = frozenset(
         "sesame",
         "toasted",
         "vegetable",
-    }
+    },
 )
 
 _VINEGAR_PREFIXES = frozenset(
@@ -110,7 +111,7 @@ _VINEGAR_PREFIXES = frozenset(
         "sherry",
         "white",
         "wine",
-    }
+    },
 )
 
 _STOCK_PREFIXES = frozenset(
@@ -120,7 +121,7 @@ _STOCK_PREFIXES = frozenset(
         "chicken",
         "low-sodium",
         "vegetable",
-    }
+    },
 )
 
 _CREAM_PREFIXES = frozenset({"heavy", "sour", "whipped", "whole-milk"})
@@ -142,7 +143,7 @@ _BEANS_PREFIXES = frozenset(
         "pinto",
         "refried",
         "white",
-    }
+    },
 )
 
 _COUNT_UNITS = frozenset(
@@ -177,7 +178,7 @@ _COUNT_UNITS = frozenset(
         "stalks",
         "stick",
         "sticks",
-    }
+    },
 )
 
 _MERGED_LINE_FILLER = frozenset(
@@ -192,7 +193,7 @@ _MERGED_LINE_FILLER = frozenset(
         "sauce",
         "with",
         "w",
-    }
+    },
 )
 
 _TRAILING_APPENDED_INGREDIENT_RE = re.compile(
@@ -456,7 +457,7 @@ _FILTER_LEADING_NOISE = frozenset(
         "heaping",
         "roughly",
         "scant",
-    }
+    },
 )
 _FILTER_PREP_LEADING = frozenset(
     {
@@ -468,11 +469,11 @@ _FILTER_PREP_LEADING = frozenset(
         "grated",
         "lightly",
         "roughly",
-    }
+    },
 )
 _FILTER_TRAILING_NOISE = frozenset({"slice", "slices", "thick", "thin", "thickly", "thinly"})
 _FILTER_COMPOUND_TAILS = frozenset(
-    {"extract", "juice", "liqueur", "paste", "powder", "sauce", "zest"}
+    {"extract", "juice", "liqueur", "paste", "powder", "sauce", "zest"},
 )
 _FILTER_PREP_CONNECTORS = frozenset({"&", "and", "or", "optional", "to"})
 _FILTER_PREP_ONLY_EXTRA = frozenset(
@@ -489,7 +490,7 @@ _FILTER_PREP_ONLY_EXTRA = frozenset(
         "pieces",
         "wedges",
         "wide",
-    }
+    },
 )
 _FILTER_PREP_DIMENSION_RE = re.compile(
     r"\d+(?:\.\d+)?(?:/\d+)?\s*-?\s*(?:inch|inches|in)\b",
@@ -596,7 +597,7 @@ def _is_non_filterable_segment(segment: str) -> bool:
     return bool(
         words
         and not _find_grocery_noun_positions(words)
-        and all(word in _FILTER_TRAILING_NOISE | {"inch", "inches", "in"} for word in words)
+        and all(word in _FILTER_TRAILING_NOISE | {"inch", "inches", "in"} for word in words),
     )
 
 
@@ -615,7 +616,7 @@ def _is_meaningless_filter_key(key: str) -> bool:
     return bool(
         _FILTER_DIMENSION_RE.match(lowered)
         or re.match(r"^-?inch\b", lowered)
-        or lowered.startswith("inch ")
+        or lowered.startswith("inch "),
     )
 
 
@@ -665,9 +666,6 @@ def _segment_contributes_filter_key(part: str) -> bool:
 
 def _filter_line_segments(line: str) -> list[str]:
     """Split stored lines into parts that each contribute filter keys."""
-    # Lazy import: ``parsed`` imports ``normalize`` for junk checks (top-level would cycle).
-    from src.grocery_wizard.ingredients.parsed import _normalize_unicode
-
     text = _strip_filter_line_prefix(line)
     text = _normalize_unicode(_normalize_unicode_dashes(text))
     if not text:
@@ -827,14 +825,6 @@ def split_compound_ingredients(text: str) -> list[str]:
     return expanded
 
 
-def is_junk_ingredient(line: str) -> bool:
-    """Return True when a line is only prep instructions, not a grocery item."""
-    # Lazy import: ``parsed.format_*`` calls ``is_junk_ingredient`` at module load otherwise.
-    from src.grocery_wizard.ingredients.parsed import _strip_optional_prefix
-
-    return _is_junk_only(_strip_optional_prefix(line.strip()))
-
-
 def drop_junk_ingredient_lines(lines: list[str]) -> list[str]:
     """Remove prep-only instruction lines from scraped ingredient lists."""
     return [line for line in lines if line.strip() and not is_junk_ingredient(line)]
@@ -902,7 +892,6 @@ def normalize_ingredient(line: str) -> str:
     """Return the canonical grocery item name from a stored or raw ingredient line."""
     from src.grocery_wizard.ingredients.parsed import (
         _needs_display_prep_strip,
-        _normalize_unicode,
         _parse_with_library,
         _prefer_plural_form,
         _should_preserve_raw_line,

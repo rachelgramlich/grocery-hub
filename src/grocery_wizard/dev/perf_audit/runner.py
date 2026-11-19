@@ -5,10 +5,9 @@ from __future__ import annotations
 import statistics
 import subprocess
 import sys
-from collections.abc import Callable
 from datetime import UTC, datetime
 from fnmatch import fnmatch
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import streamlit as st
 
@@ -22,6 +21,10 @@ from src.grocery_wizard.dev.perf_audit.report import (
 )
 from src.grocery_wizard.dev.perf_audit.scenarios import Scenario, build_scenarios
 from src.grocery_wizard.dev.perf_audit.tap import DEFAULT_WRITE_LATENCY_S, NotionTap
+from src.grocery_wizard.integrations.notion_io_errors import NOTION_BOUNDARY_ERRORS
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 def select_scenarios(patterns: list[str] | None) -> list[Scenario]:
@@ -60,16 +63,16 @@ def _collect_meta(tap: NotionTap) -> dict[str, Any]:
     }
     try:
         from src.grocery_wizard.config import load_config
-        from src.grocery_wizard.integrations.notion_household import NotionPantryDB
+        from src.grocery_wizard.integrations.notion.lazy_household import notion_pantry_db
         from src.grocery_wizard.planning.saved_weekly_plans import list_saved_plans
         from src.grocery_wizard.ui.db_access import get_db
 
         db = get_db()
         meta["recipes"] = len(db.query_recipes())
-        meta["pantry_items"] = len(NotionPantryDB().list_entries())
+        meta["pantry_items"] = len(notion_pantry_db().list_entries())
         meta["saved_plans"] = len(list_saved_plans(recipes_db=db))
         meta["notion_recipe_db"] = load_config().notion_recipe_database_id[-6:]
-    except Exception as exc:
+    except NOTION_BOUNDARY_ERRORS as exc:
         meta["data_size_error"] = str(exc)[:120]
     del mark
     return meta
@@ -135,7 +138,7 @@ def run_scenario(
         result.status = "skipped"
         result.reason = str(exc)
         return result
-    except Exception as exc:
+    except NOTION_BOUNDARY_ERRORS as exc:
         result.status = "error"
         result.reason = f"{type(exc).__name__}: {str(exc)[:200]}"
         return result
@@ -169,7 +172,7 @@ def run_audit(
         for index, scenario in enumerate(scenarios, start=1):
             say(f"[{index}/{len(scenarios)}] {scenario.id}")
             results.append(
-                run_scenario(scenario, ctx, tap, seen, reps=reps, do_cold=do_cold, profile=profile)
+                run_scenario(scenario, ctx, tap, seen, reps=reps, do_cold=do_cold, profile=profile),
             )
         latency = write_latency_s if write_latency_s is not None else DEFAULT_WRITE_LATENCY_S
         covers = {c for s in build_scenarios() for c in s.covers}

@@ -14,6 +14,7 @@ Grocery list pipeline (dev/debug failure points):
 from __future__ import annotations
 
 __all__ = [
+    "NAME_LINK_STALE_VERIFY_MESSAGE",
     "NameLinkMismatch",
     "align_item_provenance_with_items",
     "build_grocery_list",
@@ -32,8 +33,7 @@ __all__ = [
 import difflib
 import re
 from dataclasses import dataclass
-from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 from src.grocery_wizard.ingredients.normalize import (
     aggregate_amounts,
@@ -57,7 +57,13 @@ from src.grocery_wizard.shopping.store_aisles import (
 )
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from src.grocery_wizard.shopping.list_log import ListTrace
+
+NAME_LINK_STALE_VERIFY_MESSAGE: Final[str] = (
+    "Ingredients may be stale — verify Notion Name, Link, and Ingredients match."
+)
 
 _NAME_LINK_MATCH_THRESHOLD = 0.85
 _NYT_SLUG_ID_PREFIX = re.compile(r"^\d+-")
@@ -149,7 +155,7 @@ def format_name_link_mismatch_warning(mismatch: NameLinkMismatch) -> str:
     return (
         f"Name/link mismatch for '{mismatch.recipe_name}': "
         f"Link points to '{mismatch.link_title}' ({mismatch.link}). "
-        "Ingredients may be stale — verify Notion Name, Link, and Ingredients match."
+        f"{NAME_LINK_STALE_VERIFY_MESSAGE}"
     )
 
 
@@ -522,7 +528,10 @@ def _collect_ingredient_line(
             excluded_pantry.append(display_name)
         if trace is not None:
             trace.record_line(
-                recipe_name, stripped_line, outcome="skipped_pantry", item=display_name
+                recipe_name,
+                stripped_line,
+                outcome="skipped_pantry",
+                item=display_name,
             )
         return
     key = _grocery_collection_key(display_name)
@@ -535,7 +544,11 @@ def _collect_ingredient_line(
         collected[key] = (display_name, [amount])
     if trace is not None:
         trace.record_line(
-            recipe_name, stripped_line, outcome="kept", item=display_name, amount=amount
+            recipe_name,
+            stripped_line,
+            outcome="kept",
+            item=display_name,
+            amount=amount,
         )
     if recipe_name and provenance is not None:
         provenance.setdefault(key, set()).add(recipe_name)

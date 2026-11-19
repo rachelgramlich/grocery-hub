@@ -24,6 +24,7 @@ from typing import Any
 from src.grocery_wizard.config import Config, load_config
 from src.grocery_wizard.integrations.notion.recipes import notion_page_url
 from src.grocery_wizard.integrations.notion.table import NotionDatabase
+from src.grocery_wizard.integrations.notion_io_errors import NOTION_BOUNDARY_ERRORS
 from src.grocery_wizard.shopping.list_log import dump_list_log
 
 LIST_LOG_NAME_COLUMN = "Name"
@@ -71,14 +72,14 @@ class NotionListDebugLogsDB:
             if column not in self._db.column_types:
                 raise ValueError(
                     f"List debug log database needs a {column!r} column "
-                    f"(found: {sorted(self._db.column_types)})"
+                    f"(found: {sorted(self._db.column_types)})",
                 )
         json_type = self._db.column_types.get(LIST_LOG_JSON_COLUMN, "")
         if json_type not in ("rich_text", "text"):
             raise ValueError(
                 f"List debug log {LIST_LOG_JSON_COLUMN!r} must be Notion Text "
                 f"(API type rich_text or text; found {json_type!r}). Wrong types "
-                "(e.g. URL) save empty values. Show the column in your database view."
+                "(e.g. URL) save empty values. Show the column in your database view.",
             )
 
     def save_log(self, log: dict[str, Any]) -> str:
@@ -104,7 +105,7 @@ class NotionListDebugLogsDB:
                 self._db.property_payload(
                     LIST_LOG_BUILT_AT_COLUMN,
                     _built_at_date(log.get("created_at")),
-                )
+                ),
             )
         if LIST_LOG_MEALS_COLUMN in self._db.column_types:
             props.update(self._db.property_payload(LIST_LOG_MEALS_COLUMN, _meals_summary(log)))
@@ -149,6 +150,6 @@ def persist_list_log_to_notion(
             return page_id, notion_page_url(page_id)
         new_id = db.save_log(log)
         return new_id, notion_page_url(new_id)
-    except Exception:
+    except NOTION_BOUNDARY_ERRORS:
         _LOG.warning("Could not persist grocery list debug log to Notion", exc_info=True)
         return None, None

@@ -12,12 +12,14 @@ its dotted path to ``UI_GET_DB_PATCH_TARGETS``. ``test_get_db_patch_targets.py``
 from __future__ import annotations
 
 import re
-from collections.abc import Callable
-from typing import Any
-
-import pytest
+from typing import TYPE_CHECKING, Any
 
 from tests.repo_paths import REPO_ROOT
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    import pytest
 
 # ``notion_cache`` imports ``get_db`` only for ``get_db.clear()``; keep the real ``@st.cache_resource``.
 GET_DB_PATCH_EXEMPT: frozenset[str] = frozenset({"src.grocery_wizard.ui.notion_cache"})

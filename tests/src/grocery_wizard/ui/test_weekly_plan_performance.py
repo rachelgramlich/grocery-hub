@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
-from ui_source import UI_ROOT, ui_source
+from ui_source import (
+    meal_plan_filters_source,
+    ui_source,
+    weekly_plan_source,
+)
+
+from src.grocery_wizard.ui.theme import APP_THEME_STATIC_CSS
 
 
 def test_weekly_plan_uses_fragment_for_grocery_only() -> None:
@@ -16,16 +22,17 @@ def test_weekly_plan_uses_fragment_for_grocery_only() -> None:
 
 def test_meal_builder_spinner_wraps_meals_section_render() -> None:
     """Cold / Continue load keeps meal UI inside the inline spinner until ready."""
-    flow_source = (UI_ROOT / "views" / "weekly_plan" / "flow.py").read_text(encoding="utf-8")
+    flow_source = weekly_plan_source("flow.py")
     cold_block = flow_source.split("if show_meal_builder_loading or cold_recipes:", 1)[1].split(
-        "else:", 1
+        "else:",
+        1,
     )[0]
     assert "render_meals_section" in cold_block
     assert cold_block.index("render_meals_section") > cold_block.index("loading_indicator")
 
 
 def test_meals_list_batch_render_after_plan_build() -> None:
-    plan_entry = (UI_ROOT / "views" / "weekly_plan" / "plan_entry.py").read_text(encoding="utf-8")
+    plan_entry = weekly_plan_source("plan_entry.py")
     assert "PLAN_MEALS_LIST_BATCH_KEY" in plan_entry
     assert "_queue_meals_list_batch_render" in plan_entry
     built_fn = plan_entry.split("def _render_built_plan_meals", 1)[1].split("\ndef ", 1)[0]
@@ -33,7 +40,7 @@ def test_meals_list_batch_render_after_plan_build() -> None:
     assert 'loading_indicator("Loading your meals…")' in built_fn
     assert "gw-meals-batch-pending" in built_fn
     assert "gw-meals-batch-complete" in built_fn
-    css = (UI_ROOT / "static" / "app_theme.css").read_text(encoding="utf-8")
+    css = APP_THEME_STATIC_CSS.read_text(encoding="utf-8")
     assert "gw-meals-batch-pending" in css
     assert "gw-meals-batch-complete" in css
     build_fn = plan_entry.split('key="build_plan"', 1)[1].split("def _render_built_plan_meals", 1)[
@@ -43,7 +50,7 @@ def test_meals_list_batch_render_after_plan_build() -> None:
 
 
 def test_discard_stale_partial_plan_on_new_weekly_flow() -> None:
-    plan_entry = (UI_ROOT / "views" / "weekly_plan" / "plan_entry.py").read_text(encoding="utf-8")
+    plan_entry = weekly_plan_source("plan_entry.py")
     assert "_discard_stale_partial_plan" in plan_entry
     discard_fn = plan_entry.split("def _discard_stale_partial_plan", 1)[1].split("\ndef ", 1)[0]
     assert '_weekly_plan_mode() != "new"' in discard_fn
@@ -65,7 +72,7 @@ def test_meal_slot_manual_picker_uses_per_slot_fragment() -> None:
 
 
 def test_ingredient_filter_single_searchable_multiselect() -> None:
-    filters_source = (UI_ROOT / "meal_plan_filters.py").read_text(encoding="utf-8")
+    filters_source = meal_plan_filters_source()
     assert "ingredients in your recipes - search to narrow the list" in filters_source
     assert "_ingredient_search" not in filters_source
     render_fn = filters_source.split("def render_meal_plan_filters", 1)[1].split("\ndef ", 1)[0]
@@ -75,15 +82,16 @@ def test_ingredient_filter_single_searchable_multiselect() -> None:
 
 def test_plan_meals_warms_recipes_quietly_before_meal_count_continue() -> None:
     """Issue #386: no loading UI until meal-count Continue; quiet warm while picking count."""
-    flow_source = (UI_ROOT / "views" / "weekly_plan" / "flow.py").read_text(encoding="utf-8")
+    flow_source = weekly_plan_source("flow.py")
     plan_block = flow_source.split("WeeklyRailStep.PLAN_MEALS", 1)[1].split(
-        "WeeklyRailStep.GROCERY_LIST", 1
+        "WeeklyRailStep.GROCERY_LIST",
+        1,
     )[0]
     assert "_render_meal_count_input()" in plan_block
     assert "_warm_weekly_plan_recipes_quiet" in plan_block
     assert "schedule_ingredient_index_warm" in flow_source
     assert plan_block.index("_render_meal_count_input()") < plan_block.index(
-        "_warm_weekly_plan_recipes_quiet"
+        "_warm_weekly_plan_recipes_quiet",
     )
     assert plan_block.count("cached_query_recipes(") == 0
     assert flow_source.count("cached_query_recipes(") == 2
@@ -100,7 +108,8 @@ def test_prebuild_manual_picker_lazy_when_collapsed() -> None:
     """Issue #336: skip heavy filter widgets until Choose meals manually popover is open."""
     source = ui_source()
     prebuild = source.split("def _render_prebuild_recipe_picker", 1)[1].split(
-        "def _set_plan_slot_recipe", 1
+        "def _set_plan_slot_recipe",
+        1,
     )[0]
     assert "PLAN_PREBUILD_MANUAL_POPOVER_KEY" in prebuild
     assert "_render_filtered_recipe_picker" in prebuild
@@ -111,28 +120,30 @@ def test_prebuild_manual_picker_lazy_when_collapsed() -> None:
 
 def test_meal_builder_defers_ingredient_index_until_needed() -> None:
     """Issue #391: Notion recipe load must not build the full ingredient index up front."""
-    flow_source = (UI_ROOT / "views" / "weekly_plan" / "flow.py").read_text(encoding="utf-8")
+    flow_source = weekly_plan_source("flow.py")
     load_fn = flow_source.split("def _load_weekly_plan_recipes", 1)[1].split("\n\n", 1)[0]
     assert "cached_query_recipes" in load_fn
     assert "warm_weekly_plan_meal_caches" not in flow_source
     assert "_cached_plan_ingredient_index" not in load_fn
     assert "_prefetch_weekly_plan_recipes" not in flow_source
 
-    plan_entry = (UI_ROOT / "views" / "weekly_plan" / "plan_entry.py").read_text(encoding="utf-8")
+    plan_entry = weekly_plan_source("plan_entry.py")
     meals_section = plan_entry.split("def render_meals_section", 1)[1].split("\ndef ", 1)[0]
     assert "_cached_plan_ingredient_index(all_recipes)" not in meals_section
     assert "_ingredient_index_for_filters" in meals_section
     assert "Loading your meals" not in meals_section
     filtered_picker = plan_entry.split("def _render_filtered_recipe_picker", 1)[1].split(
-        "\ndef ", 1
+        "\ndef ",
+        1,
     )[0]
     assert "_cached_plan_ingredient_index(all_recipes)" in filtered_picker
 
 
 def test_get_started_does_not_prefetch_recipes() -> None:
-    flow_source = (UI_ROOT / "views" / "weekly_plan" / "flow.py").read_text(encoding="utf-8")
+    flow_source = weekly_plan_source("flow.py")
     get_started_path = flow_source.split("if not weekly_plan_has_started():", 1)[1].split(
-        "render_weekly_step_rail", 1
+        "render_weekly_step_rail",
+        1,
     )[0]
     assert "_warm_weekly_plan_recipes_quiet" not in get_started_path
     assert "loading_indicator" not in get_started_path
@@ -144,6 +155,7 @@ def test_long_actions_show_spinners() -> None:
     assert "Preparing ingredient review" in source
     assert "Building grocery list" in source
     refresh_fn = source.split("def _refresh_notion_cache_from_ui", 1)[1].split(
-        "def _render_notion_cache_controls", 1
+        "def _render_notion_cache_controls",
+        1,
     )[0]
     assert "Refreshing from Notion" in refresh_fn

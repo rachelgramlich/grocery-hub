@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
+from typing import TYPE_CHECKING
 
-from src.grocery_wizard.integrations.notion import ColumnInfo, DatabaseSchema
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+
+    from src.grocery_wizard.integrations.notion import ColumnInfo, DatabaseSchema
 
 __all__ = [
     "classification_rules_key",
