@@ -26,10 +26,11 @@ from src.grocery_wizard.config import (
 )
 from src.grocery_wizard.ui.access_gate import enforce_access_gate
 from src.grocery_wizard.ui.app_title import render_app_title
+from src.grocery_wizard.ui.components.dropdown_dismiss import install_dropdown_dismiss
+from src.grocery_wizard.ui.components.feedback import render_feedback_controls
+from src.grocery_wizard.ui.components.loading import loading_indicator, mount_global_loading_banner
 from src.grocery_wizard.ui.db_access import get_db
-from src.grocery_wizard.ui.dropdown_dismiss import install_dropdown_dismiss
 from src.grocery_wizard.ui.external_links import install_external_links
-from src.grocery_wizard.ui.feedback import render_feedback_controls
 from src.grocery_wizard.ui.ids import (
     CONTROL_GLOBAL_FEEDBACK,
     CONTROL_GLOBAL_PAGE_PICKER,
@@ -41,7 +42,6 @@ from src.grocery_wizard.ui.ids import (
     PAGE_SLUG_WEEKLY,
     control_streamlit_key,
 )
-from src.grocery_wizard.ui.loading import loading_indicator, mount_global_loading_banner
 from src.grocery_wizard.ui.notion_cache import invalidate_notion_cache
 from src.grocery_wizard.ui.styles import inject_app_styles
 from src.grocery_wizard.ui.views import (
