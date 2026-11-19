@@ -1191,6 +1191,7 @@ class NytReclassifySummary:
     meal_changes: int = 0
     weeknight_set: int = 0
     weeknight_cleared: int = 0
+    dinner_category_cleared: int = 0
     unchanged: int = 0
     api_failures: int = 0
     changes: list[NytReclassifyChange] = field(default_factory=list)
@@ -1203,6 +1204,24 @@ def _require_nyt_synced_column(db: Any) -> str:
             f"NYT synced checkbox column not found. Add '{DEFAULT_NYT_SYNCED_COLUMN}' to Notion."
         )
     return nyt_column
+
+
+def _reclassify_ingredient_lines(recipe: Any) -> list[str]:
+    from src.grocery_wizard.ingredients.sync import parse_ingredients_text
+
+    raw = (recipe.ingredients or "").replace("<br />", "\n").replace("<br>", "\n")
+    lines, _ = parse_ingredients_text(raw)
+    if lines:
+        return lines
+    return [line.strip() for line in raw.splitlines() if line.strip()]
+
+
+def _dinner_category_column_name(schema: Any) -> str:
+    from src.grocery_wizard.recipes.recipe_schema_columns import (
+        dinner_lunch_category_column_from_schema,
+    )
+
+    return dinner_lunch_category_column_from_schema(schema) or ""
 
 
 def _weeknight_column_for_reclassify(db: Any) -> str:
@@ -1239,13 +1258,20 @@ def _fetch_reclassify_total_minutes(
 def _build_reclassify_field_updates(
     recipe: Any,
     *,
+    schema: Any,
     new_meal: Any,
     old_meal: Any,
     total_minutes: float | None,
     weeknight_column: str,
+    dinner_category_column: str,
     summary: NytReclassifySummary,
 ) -> dict[str, Any]:
     # Lazy import: weeknight helper used only during NYT reclassify updates.
+    from src.grocery_wizard.recipes.classify import MEALS_WITHOUT_DINNER_CATEGORY
+    from src.grocery_wizard.recipes.recipe_maintenance import (
+        is_blank_metadata_value,
+        normalize_meal_values,
+    )
     from src.grocery_wizard.recipes.weeknight import is_weeknight_friendly
 
     title = recipe.name
@@ -1285,6 +1311,34 @@ def _build_reclassify_field_updates(
                     field=weeknight_column,
                     old_value=old_weeknight,
                     new_value=new_weeknight,
+                )
+            )
+
+    effective_meal = fields.get("Meal", old_meal)
+    meals = normalize_meal_values(effective_meal)
+    if dinner_category_column and meals & MEALS_WITHOUT_DINNER_CATEGORY:
+        from src.grocery_wizard.recipes.recipe_schema_columns import (
+            dinner_lunch_category_na_option,
+            is_dinner_lunch_category_na_only,
+        )
+
+        col = schema.all_columns.get(dinner_category_column)
+        na_label = dinner_lunch_category_na_option(col.options) if col else None
+        current_dinner_category = recipe.properties.get(dinner_category_column)
+        needs_na = na_label and (
+            is_blank_metadata_value("multi_select", current_dinner_category)
+            or not is_dinner_lunch_category_na_only(current_dinner_category, na_label=na_label)
+        )
+        if needs_na:
+            fields[dinner_category_column] = [na_label]
+            summary.dinner_category_cleared += 1
+            summary.changes.append(
+                NytReclassifyChange(
+                    page_id=recipe.page_id,
+                    name=title,
+                    field=dinner_category_column,
+                    old_value=current_dinner_category,
+                    new_value=[na_label],
                 )
             )
 
@@ -1328,6 +1382,7 @@ def reclassify_nyt_synced_recipes(
     nyt_column = _require_nyt_synced_column(db)
     weeknight_column = _weeknight_column_for_reclassify(db)
     filter_columns = filter_columns_for_recipe_classify(db.schema.filter_columns)
+    dinner_category_column = _dinner_category_column_name(db.schema)
     summary = NytReclassifySummary()
 
     for recipe in db.query_recipes():
@@ -1336,7 +1391,11 @@ def reclassify_nyt_synced_recipes(
 
         summary.total += 1
         title = recipe.name
-        inferred = classify_recipe(title, [], filter_columns)
+        inferred = classify_recipe(
+            title,
+            _reclassify_ingredient_lines(recipe),
+            filter_columns,
+        )
         new_meal = inferred.get("Meal")
         old_meal = recipe.properties.get("Meal")
 
@@ -1345,10 +1404,12 @@ def reclassify_nyt_synced_recipes(
         )
         fields = _build_reclassify_field_updates(
             recipe,
+            schema=db.schema,
             new_meal=new_meal,
             old_meal=old_meal,
             total_minutes=total_minutes,
             weeknight_column=weeknight_column,
+            dinner_category_column=dinner_category_column,
             summary=summary,
         )
         _apply_reclassify_recipe_updates(
@@ -1369,6 +1430,7 @@ def format_reclassify_summary(summary: NytReclassifySummary) -> str:
         f"Meal changes: {summary.meal_changes}",
         f"Weeknight friendly set: {summary.weeknight_set}",
         f"Weeknight friendly cleared: {summary.weeknight_cleared}",
+        f"Dinner category cleared: {summary.dinner_category_cleared}",
         f"Unchanged: {summary.unchanged}",
     ]
     if summary.api_failures:
