@@ -94,6 +94,84 @@ def test_ingredients_from_parts() -> None:
     assert _ingredients_from_parts(parts) == ["1 cup flour", "salt"]
 
 
+def test_parse_minutes_from_display_when_minutes_key_missing() -> None:
+    from src.grocery_wizard.integrations.nyt_cooking import _parse_minutes
+
+    assert _parse_minutes({"display": "20 minutes"}) == 20.0
+    assert _parse_minutes({"label": "25 min"}) == 25.0
+    assert _parse_minutes({"display": "1 hour"}) == 60.0
+    assert _parse_minutes({"display": "About 1 hour"}) == 60.0
+    assert _parse_minutes({"display": "1 hour 30 minutes"}) == 90.0
+
+
+def test_reclassify_does_not_clear_weeknight_without_prep_and_cook() -> None:
+    from dataclasses import dataclass
+
+    from src.grocery_wizard.integrations.notion import ColumnInfo, DatabaseSchema
+    from src.grocery_wizard.integrations.nyt_cooking import (
+        NytRecipe,
+        reclassify_nyt_synced_recipes,
+    )
+
+    @dataclass
+    class StubRecipe:
+        page_id: str
+        name: str
+        link: str
+        ingredients: str | None
+        properties: dict
+
+    db = MagicMock()
+    db.nyt_synced_column_name.return_value = "Synced from NYT recipe box"
+    db.schema = DatabaseSchema(
+        name_column="Name",
+        link_column="Link",
+        ingredients_column="Ingredients",
+        filter_columns=[ColumnInfo(name="Meal", type="multi_select", options=["Dinner"])],
+        checkbox_columns=[ColumnInfo(name="Dinner: Weeknight Friendly", type="checkbox")],
+        all_columns={
+            "Meal": ColumnInfo(name="Meal", type="multi_select", options=["Dinner"]),
+            "Dinner: Weeknight Friendly": ColumnInfo(
+                name="Dinner: Weeknight Friendly",
+                type="checkbox",
+            ),
+            "Synced from NYT recipe box": ColumnInfo(
+                name="Synced from NYT recipe box",
+                type="checkbox",
+            ),
+        },
+    )
+    db.query_recipes.return_value = [
+        StubRecipe(
+            page_id="page-x",
+            name="Bulgogi-Style Tofu",
+            link="https://cooking.nytimes.com/recipes/1-bulgogi",
+            ingredients=None,
+            properties={
+                "Synced from NYT recipe box": True,
+                "Meal": ["Dinner"],
+                "Dinner: Weeknight Friendly": True,
+            },
+        ),
+    ]
+
+    client = MagicMock()
+    client.get_recipe.return_value = NytRecipe(
+        id="1",
+        name="Bulgogi-Style Tofu",
+        url="https://cooking.nytimes.com/recipes/1-bulgogi",
+        ingredients=[],
+        total_time_minutes=75,
+        prep_time_minutes=None,
+        cook_time_minutes=None,
+    )
+
+    summary = reclassify_nyt_synced_recipes(db, client, dry_run=True)
+
+    assert summary.weeknight_cleared == 0
+    assert summary.unchanged == 1
+
+
 def test_parse_recipe_payload() -> None:
     recipe = _parse_recipe_payload(
         {
@@ -857,6 +935,473 @@ def test_reclassify_clears_dinner_category_on_dessert() -> None:
     db.update_recipe.assert_called_once_with("page-brownie", {"Dinner Category": ["N/A"]})
 
 
+def test_reclassify_sets_weeknight_when_meal_is_multi_select_dinner() -> None:
+    from dataclasses import dataclass
+
+    from src.grocery_wizard.integrations.notion import ColumnInfo, DatabaseSchema
+    from src.grocery_wizard.integrations.nyt_cooking import (
+        NytRecipe,
+        reclassify_nyt_synced_recipes,
+    )
+
+    @dataclass
+    class StubRecipe:
+        page_id: str
+        name: str
+        link: str
+        ingredients: str | None
+        properties: dict
+
+    db = MagicMock()
+    db.nyt_synced_column_name.return_value = "Synced from NYT recipe box"
+    db.schema = DatabaseSchema(
+        name_column="Name",
+        link_column="Link",
+        ingredients_column="Ingredients",
+        filter_columns=[
+            ColumnInfo(
+                name="Meal",
+                type="multi_select",
+                options=["Dinner", "Lunch", "Snack/Side"],
+            ),
+        ],
+        checkbox_columns=[
+            ColumnInfo(name="Dinner: Weeknight Friendly", type="checkbox"),
+        ],
+        all_columns={
+            "Meal": ColumnInfo(name="Meal", type="multi_select", options=["Dinner"]),
+            "Dinner: Weeknight Friendly": ColumnInfo(
+                name="Dinner: Weeknight Friendly",
+                type="checkbox",
+            ),
+            "Synced from NYT recipe box": ColumnInfo(
+                name="Synced from NYT recipe box",
+                type="checkbox",
+            ),
+        },
+    )
+    db.query_recipes.return_value = [
+        StubRecipe(
+            page_id="page-3",
+            name="Sheet-Pan Lemony Chicken",
+            link="https://cooking.nytimes.com/recipes/103-sheet-pan",
+            ingredients=None,
+            properties={
+                "Synced from NYT recipe box": True,
+                "Meal": ["Dinner"],
+                "Dinner: Weeknight Friendly": False,
+            },
+        ),
+    ]
+
+    client = MagicMock()
+    client.get_recipe.return_value = NytRecipe(
+        id="103",
+        name="Sheet-Pan Lemony Chicken",
+        url="https://cooking.nytimes.com/recipes/103-sheet-pan",
+        ingredients=[],
+        total_time_minutes=75,
+    )
+
+    summary = reclassify_nyt_synced_recipes(db, client, dry_run=False)
+
+    assert summary.total == 1
+    assert summary.weeknight_set == 1
+    db.update_recipe.assert_called_once_with(
+        "page-3",
+        {"Dinner: Weeknight Friendly": True},
+    )
+
+
+def test_reclassify_pasta_primavera_dinner_and_weeknight_with_salad_ingredients() -> None:
+    from dataclasses import dataclass
+
+    from src.grocery_wizard.integrations.notion import ColumnInfo, DatabaseSchema
+    from src.grocery_wizard.integrations.nyt_cooking import (
+        NytRecipe,
+        reclassify_nyt_synced_recipes,
+    )
+
+    @dataclass
+    class StubRecipe:
+        page_id: str
+        name: str
+        link: str
+        ingredients: str | None
+        properties: dict
+
+    db = MagicMock()
+    db.nyt_synced_column_name.return_value = "Synced from NYT recipe box"
+    db.schema = DatabaseSchema(
+        name_column="Name",
+        link_column="Link",
+        ingredients_column="Ingredients",
+        filter_columns=[
+            ColumnInfo(
+                name="Meal",
+                type="multi_select",
+                options=["Dinner", "Snack/Side"],
+            ),
+        ],
+        checkbox_columns=[
+            ColumnInfo(name="Dinner: Weeknight Friendly", type="checkbox"),
+        ],
+        all_columns={
+            "Meal": ColumnInfo(name="Meal", type="multi_select", options=["Dinner"]),
+            "Dinner: Weeknight Friendly": ColumnInfo(
+                name="Dinner: Weeknight Friendly",
+                type="checkbox",
+            ),
+            "Synced from NYT recipe box": ColumnInfo(
+                name="Synced from NYT recipe box",
+                type="checkbox",
+            ),
+        },
+    )
+    db.query_recipes.return_value = [
+        StubRecipe(
+            page_id="page-primavera",
+            name="Pasta Primavera",
+            link="https://cooking.nytimes.com/recipes/104-pasta-primavera",
+            ingredients="mixed salad greens\nasparagus\npeas\nfusilli",
+            properties={
+                "Synced from NYT recipe box": True,
+                "Meal": "Snack/Side",
+                "Dinner: Weeknight Friendly": False,
+            },
+        ),
+    ]
+
+    client = MagicMock()
+    client.get_recipe.return_value = NytRecipe(
+        id="104",
+        name="Pasta Primavera",
+        url="https://cooking.nytimes.com/recipes/104-pasta-primavera",
+        ingredients=[],
+        total_time_minutes=50,
+        prep_time_minutes=15,
+        cook_time_minutes=25,
+    )
+
+    summary = reclassify_nyt_synced_recipes(db, client, dry_run=False)
+
+    assert summary.total == 1
+    assert summary.meal_changes == 1
+    assert summary.weeknight_set == 1
+    db.update_recipe.assert_called_once()
+    fields = db.update_recipe.call_args[0][1]
+    assert fields["Meal"] == ["Dinner"]
+    assert fields["Dinner: Weeknight Friendly"] is True
+
+
+def test_reclassify_bulgogi_weeknight_when_total_includes_marinating() -> None:
+    from dataclasses import dataclass
+
+    from src.grocery_wizard.integrations.notion import ColumnInfo, DatabaseSchema
+    from src.grocery_wizard.integrations.nyt_cooking import (
+        NytRecipe,
+        reclassify_nyt_synced_recipes,
+    )
+
+    @dataclass
+    class StubRecipe:
+        page_id: str
+        name: str
+        link: str
+        ingredients: str | None
+        properties: dict
+
+    db = MagicMock()
+    db.nyt_synced_column_name.return_value = "Synced from NYT recipe box"
+    db.schema = DatabaseSchema(
+        name_column="Name",
+        link_column="Link",
+        ingredients_column="Ingredients",
+        filter_columns=[
+            ColumnInfo(
+                name="Meal",
+                type="multi_select",
+                options=["Dinner", "Snack/Side"],
+            ),
+        ],
+        checkbox_columns=[
+            ColumnInfo(name="Dinner: Weeknight Friendly", type="checkbox"),
+        ],
+        all_columns={
+            "Meal": ColumnInfo(name="Meal", type="multi_select", options=["Dinner"]),
+            "Dinner: Weeknight Friendly": ColumnInfo(
+                name="Dinner: Weeknight Friendly",
+                type="checkbox",
+            ),
+            "Synced from NYT recipe box": ColumnInfo(
+                name="Synced from NYT recipe box",
+                type="checkbox",
+            ),
+        },
+    )
+    db.query_recipes.return_value = [
+        StubRecipe(
+            page_id="page-bulgogi",
+            name="Bulgogi-Style Tofu",
+            link="https://cooking.nytimes.com/recipes/10200-bulgogi-style-tofu",
+            ingredients="tofu\nsoy sauce\npear",
+            properties={
+                "Synced from NYT recipe box": True,
+                "Meal": ["Dinner"],
+                "Dinner: Weeknight Friendly": False,
+            },
+        ),
+    ]
+
+    client = MagicMock()
+    client.get_recipe.return_value = NytRecipe(
+        id="10200",
+        name="Bulgogi-Style Tofu",
+        url="https://cooking.nytimes.com/recipes/10200-bulgogi-style-tofu",
+        ingredients=[],
+        total_time_minutes=75,
+        prep_time_minutes=20,
+        cook_time_minutes=25,
+    )
+
+    summary = reclassify_nyt_synced_recipes(db, client, dry_run=False)
+
+    assert summary.total == 1
+    assert summary.meal_changes == 0
+    assert summary.weeknight_set == 1
+    db.update_recipe.assert_called_once_with(
+        "page-bulgogi",
+        {"Dinner: Weeknight Friendly": True},
+    )
+
+
+def test_reclassify_keeps_bulgogi_weeknight_when_prep_counts_marinating() -> None:
+    from dataclasses import dataclass
+
+    from src.grocery_wizard.integrations.notion import ColumnInfo, DatabaseSchema
+    from src.grocery_wizard.integrations.nyt_cooking import (
+        NytRecipe,
+        reclassify_nyt_synced_recipes,
+    )
+
+    @dataclass
+    class StubRecipe:
+        page_id: str
+        name: str
+        link: str
+        ingredients: str | None
+        properties: dict
+
+    db = MagicMock()
+    db.nyt_synced_column_name.return_value = "Synced from NYT recipe box"
+    db.schema = DatabaseSchema(
+        name_column="Name",
+        link_column="Link",
+        ingredients_column="Ingredients",
+        filter_columns=[
+            ColumnInfo(name="Meal", type="multi_select", options=["Dinner"]),
+        ],
+        checkbox_columns=[
+            ColumnInfo(name="Dinner: Weeknight Friendly", type="checkbox"),
+        ],
+        all_columns={
+            "Meal": ColumnInfo(name="Meal", type="multi_select", options=["Dinner"]),
+            "Dinner: Weeknight Friendly": ColumnInfo(
+                name="Dinner: Weeknight Friendly",
+                type="checkbox",
+            ),
+            "Synced from NYT recipe box": ColumnInfo(
+                name="Synced from NYT recipe box",
+                type="checkbox",
+            ),
+        },
+    )
+    db.query_recipes.return_value = [
+        StubRecipe(
+            page_id="page-bulgogi-2",
+            name="Bulgogi-Style Tofu",
+            link="https://cooking.nytimes.com/recipes/10200-bulgogi-style-tofu",
+            ingredients=None,
+            properties={
+                "Synced from NYT recipe box": True,
+                "Meal": ["Dinner"],
+                "Dinner: Weeknight Friendly": True,
+            },
+        ),
+    ]
+
+    client = MagicMock()
+    client.get_recipe.return_value = NytRecipe(
+        id="10200",
+        name="Bulgogi-Style Tofu",
+        url="https://cooking.nytimes.com/recipes/10200-bulgogi-style-tofu",
+        ingredients=[],
+        total_time_minutes=90,
+        prep_time_minutes=50,
+        cook_time_minutes=25,
+    )
+
+    summary = reclassify_nyt_synced_recipes(db, client, dry_run=True)
+
+    assert summary.total == 1
+    assert summary.weeknight_cleared == 0
+    assert summary.unchanged == 1
+    db.update_recipe.assert_not_called()
+
+
+def test_reclassify_uses_nyt_ingredients_when_notion_ingredients_empty() -> None:
+    from dataclasses import dataclass
+
+    from src.grocery_wizard.integrations.notion import ColumnInfo, DatabaseSchema
+    from src.grocery_wizard.integrations.nyt_cooking import (
+        NytRecipe,
+        reclassify_nyt_synced_recipes,
+    )
+
+    @dataclass
+    class StubRecipe:
+        page_id: str
+        name: str
+        link: str
+        ingredients: str | None
+        properties: dict
+
+    db = MagicMock()
+    db.nyt_synced_column_name.return_value = "Synced from NYT recipe box"
+    db.schema = DatabaseSchema(
+        name_column="Name",
+        link_column="Link",
+        ingredients_column="Ingredients",
+        filter_columns=[
+            ColumnInfo(
+                name="Meal",
+                type="multi_select",
+                options=["Dinner", "Snack/Side"],
+            ),
+        ],
+        checkbox_columns=[
+            ColumnInfo(name="Dinner: Weeknight Friendly", type="checkbox"),
+        ],
+        all_columns={
+            "Meal": ColumnInfo(name="Meal", type="multi_select", options=["Dinner"]),
+            "Dinner: Weeknight Friendly": ColumnInfo(
+                name="Dinner: Weeknight Friendly",
+                type="checkbox",
+            ),
+            "Synced from NYT recipe box": ColumnInfo(
+                name="Synced from NYT recipe box",
+                type="checkbox",
+            ),
+        },
+    )
+    db.query_recipes.return_value = [
+        StubRecipe(
+            page_id="page-pasta",
+            name="Pasta Primavera",
+            link="https://cooking.nytimes.com/recipes/104-pasta-primavera",
+            ingredients=None,
+            properties={
+                "Synced from NYT recipe box": True,
+                "Meal": ["Snack/Side"],
+                "Dinner: Weeknight Friendly": False,
+            },
+        ),
+    ]
+
+    client = MagicMock()
+    client.get_recipe.return_value = NytRecipe(
+        id="104",
+        name="Pasta Primavera",
+        url="https://cooking.nytimes.com/recipes/104-pasta-primavera",
+        ingredients=["Pita chips or another snack, for serving", "fusilli", "asparagus"],
+        total_time_minutes=50,
+        prep_time_minutes=15,
+        cook_time_minutes=25,
+    )
+
+    summary = reclassify_nyt_synced_recipes(db, client, dry_run=False)
+
+    assert summary.total == 1
+    assert summary.meal_changes == 1
+    fields = db.update_recipe.call_args[0][1]
+    assert fields["Meal"] == ["Dinner"]
+
+
+def test_reclassify_skips_meal_update_when_select_matches_multi_select() -> None:
+    from dataclasses import dataclass
+
+    from src.grocery_wizard.integrations.notion import ColumnInfo, DatabaseSchema
+    from src.grocery_wizard.integrations.nyt_cooking import (
+        NytRecipe,
+        reclassify_nyt_synced_recipes,
+    )
+
+    @dataclass
+    class StubRecipe:
+        page_id: str
+        name: str
+        link: str
+        ingredients: str | None
+        properties: dict
+
+    db = MagicMock()
+    db.nyt_synced_column_name.return_value = "Synced from NYT recipe box"
+    db.schema = DatabaseSchema(
+        name_column="Name",
+        link_column="Link",
+        ingredients_column="Ingredients",
+        filter_columns=[
+            ColumnInfo(
+                name="Meal",
+                type="multi_select",
+                options=["Dinner", "Snack/Side"],
+            ),
+        ],
+        checkbox_columns=[
+            ColumnInfo(name="Dinner: Weeknight Friendly", type="checkbox"),
+        ],
+        all_columns={
+            "Meal": ColumnInfo(name="Meal", type="multi_select", options=["Dinner"]),
+            "Dinner: Weeknight Friendly": ColumnInfo(
+                name="Dinner: Weeknight Friendly",
+                type="checkbox",
+            ),
+            "Synced from NYT recipe box": ColumnInfo(
+                name="Synced from NYT recipe box",
+                type="checkbox",
+            ),
+        },
+    )
+    db.query_recipes.return_value = [
+        StubRecipe(
+            page_id="page-pasta",
+            name="Pasta Primavera",
+            link="https://cooking.nytimes.com/recipes/104-pasta-primavera",
+            ingredients="asparagus\npeas",
+            properties={
+                "Synced from NYT recipe box": True,
+                "Meal": "Dinner",
+                "Dinner: Weeknight Friendly": True,
+            },
+        ),
+    ]
+
+    client = MagicMock()
+    client.get_recipe.return_value = NytRecipe(
+        id="104",
+        name="Pasta Primavera",
+        url="https://cooking.nytimes.com/recipes/104-pasta-primavera",
+        ingredients=[],
+        total_time_minutes=45,
+    )
+
+    summary = reclassify_nyt_synced_recipes(db, client, dry_run=False)
+
+    assert summary.total == 1
+    assert summary.meal_changes == 0
+    assert db.update_recipe.call_count == 0
+
+
 def test_format_sync_summary_includes_counts() -> None:
     from src.grocery_wizard.integrations.nyt_cooking import NytSyncSummary, format_sync_summary
 
@@ -923,3 +1468,90 @@ def test_add_prefetched_recipes_cleans_ingredients_like_the_add_recipe_flow() ->
 
     saved = db.create_recipe.call_args.args[0]
     assert saved["Ingredients"].splitlines() == ["flour", "butter"]
+
+
+@pytest.fixture
+def nyt_reclassify_screenshot_summary():
+    """Scenario matching the user screenshot: 235 NYT-synced, three field writes."""
+    from src.grocery_wizard.integrations.nyt_cooking import (
+        NytReclassifyChange,
+        NytReclassifySummary,
+    )
+    from src.grocery_wizard.recipes.weeknight import DEFAULT_WEEKNIGHT_COLUMN
+
+    return NytReclassifySummary(
+        total=235,
+        meal_changes=1,
+        weeknight_cleared=2,
+        unchanged=233,
+        changes=[
+            NytReclassifyChange(
+                page_id="pasta-page-id",
+                name="Pasta Primavera",
+                field="Meal",
+                old_value=["Dinner"],
+                new_value=["Snack/Side"],
+            ),
+            NytReclassifyChange(
+                page_id="pasta-page-id",
+                name="Pasta Primavera",
+                field=DEFAULT_WEEKNIGHT_COLUMN,
+                old_value=True,
+                new_value=False,
+            ),
+            NytReclassifyChange(
+                page_id="bulgogi-page-id",
+                name="Bulgogi-Style Tofu",
+                field=DEFAULT_WEEKNIGHT_COLUMN,
+                old_value=True,
+                new_value=False,
+            ),
+        ],
+    )
+
+
+def test_format_reclassify_summary_headline_screenshot_scenario(
+    nyt_reclassify_screenshot_summary,
+) -> None:
+    from src.grocery_wizard.integrations.nyt_cooking import format_reclassify_summary_headline
+
+    headline = format_reclassify_summary_headline(nyt_reclassify_screenshot_summary)
+    assert headline == (
+        "NYT reclassify — 235 recipes · 2 updated · 233 unchanged (meal 1 · weeknight cleared 2)"
+    )
+
+
+def test_format_reclassify_summary_grouped_screenshot_scenario(
+    nyt_reclassify_screenshot_summary,
+) -> None:
+    from src.grocery_wizard.integrations.nyt_cooking import format_reclassify_summary
+    from src.grocery_wizard.recipes.weeknight import DEFAULT_WEEKNIGHT_COLUMN
+
+    text = format_reclassify_summary(nyt_reclassify_screenshot_summary)
+    assert text.startswith(
+        "NYT reclassify — 235 recipes · 2 updated · 233 unchanged (meal 1 · weeknight cleared 2)\n"
+    )
+    assert "**(1 recipe) Meal: `['Dinner']` → `['Snack/Side']`**" in text
+    assert "[Pasta Primavera](https://www.notion.so/pastapageid)" in text
+    assert f"**(2 recipes) {DEFAULT_WEEKNIGHT_COLUMN}: `True` → `False`**" in text
+    assert "[Bulgogi-Style Tofu](https://www.notion.so/" in text
+    meal_pos = text.index("**(1 recipe) Meal:")
+    weeknight_pos = text.index(f"**(2 recipes) {DEFAULT_WEEKNIGHT_COLUMN}:")
+    assert meal_pos < weeknight_pos
+    assert text.count("[Pasta Primavera]") == 2
+
+
+def test_format_reclassify_summary_no_changes_headline_only() -> None:
+    from src.grocery_wizard.integrations.nyt_cooking import (
+        NytReclassifySummary,
+        format_reclassify_summary,
+        format_reclassify_summary_headline,
+        reclassify_summary_updated_count,
+    )
+
+    summary = NytReclassifySummary(total=10, unchanged=10)
+    assert reclassify_summary_updated_count(summary) == 0
+    assert format_reclassify_summary_headline(summary) == (
+        "NYT reclassify — 10 recipes · 0 updated · 10 unchanged"
+    )
+    assert format_reclassify_summary(summary) == format_reclassify_summary_headline(summary)

@@ -9,6 +9,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from tests.notion_get_db_patch_targets import patch_ui_get_db
 from tests.notion_test_env import (
     PYTEST_NOTION_API_KEY_PLACEHOLDER,
     prime_notion_env_for_pytest,
@@ -90,19 +91,7 @@ def _notion_test_doubles(monkeypatch: pytest.MonkeyPatch) -> None:
     def _fake_get_db() -> MagicMock:
         return fake_db
 
-    get_db_targets = (
-        "src.grocery_wizard.ui.db_access",
-        "src.grocery_wizard.ui.app",
-        "src.grocery_wizard.ui.nyt_sync",
-        "src.grocery_wizard.ui.views.add_recipe",
-        "src.grocery_wizard.ui.views.weekly_plan.flow",
-        "src.grocery_wizard.ui.views.weekly_plan.plan_entry",
-        "src.grocery_wizard.ui.views.weekly_plan.grocery_list_ui",
-        "src.grocery_wizard.ui.views.weekly_plan.state",
-        "src.grocery_wizard.ui.views.browse_recipes",
-    )
-    for module_path in get_db_targets:
-        monkeypatch.setattr(f"{module_path}.get_db", _fake_get_db, raising=False)
+    patch_ui_get_db(monkeypatch, _fake_get_db)
     monkeypatch.setattr(
         "src.grocery_wizard.ui.notion_cache._load_pantry_cached",
         lambda _generation, _household_db_id: [],

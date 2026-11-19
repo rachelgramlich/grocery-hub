@@ -13,8 +13,10 @@ from src.grocery_wizard.integrations.notion_views import (
 )
 from src.grocery_wizard.integrations.nyt_cooking import (
     NYTCookingClient,
+    NytSyncProgressUpdate,
     credentials_status,
     format_reclassify_summary,
+    format_reclassify_summary_headline,
     reclassify_nyt_synced_recipes,
 )
 from src.grocery_wizard.recipes.recipe_maintenance import (
@@ -51,11 +53,17 @@ def _nyt_client_if_configured() -> NYTCookingClient | None:
 
 
 def _write_backfill_progress_line(line: str) -> None:
-    """Render a backfill log line; failed rows use Markdown links into Notion."""
-    if line.startswith("Failed:") and "](https://" in line:
+    """Render a backfill log line; recipe rows use Markdown links into Notion."""
+    if "](https://" in line:
         st.markdown(line)
     else:
         st.write(line)
+
+
+def _nyt_sync_progress_log_line(update: NytSyncProgressUpdate) -> str | None:
+    """Map NYT sync-style progress events to maintenance log lines."""
+    message = update.message.strip()
+    return message or None
 
 
 def _run_backfill_with_progress(
@@ -274,8 +282,10 @@ def render_recipe_maintenance() -> None:
                 progress_lines: list[str] = []
                 progress_bar = st.progress(0.0, text="NYT reclassify…")
 
-                def on_progress(message: str) -> None:
-                    progress_lines.append(message)
+                def on_progress(update: NytSyncProgressUpdate) -> None:
+                    line = _nyt_sync_progress_log_line(update)
+                    if line is not None:
+                        progress_lines.append(line)
 
                 with st.status("NYT reclassify", expanded=True) as status:
                     summary = reclassify_nyt_synced_recipes(
@@ -285,17 +295,11 @@ def render_recipe_maintenance() -> None:
                         on_progress=on_progress,
                     )
                     for line in progress_lines[-40:]:
-                        st.write(line)
-                    if summary.changes:
-                        for change in summary.changes[:30]:
-                            st.write(
-                                f"{change.name}: {change.field} "
-                                f"{change.old_value} → {change.new_value}"
-                            )
-                    outcome = format_reclassify_summary(summary)
-                    status.update(label=outcome, state="complete")
-                progress_bar.progress(1.0, text=outcome)
-                st.success(outcome)
+                        _write_backfill_progress_line(line)
+                    headline = format_reclassify_summary_headline(summary)
+                    status.update(label=headline, state="complete")
+                progress_bar.progress(1.0, text=headline)
+                st.markdown(format_reclassify_summary(summary))
                 if not reclassify_dry and (
                     summary.meal_changes
                     or summary.dinner_category_cleared

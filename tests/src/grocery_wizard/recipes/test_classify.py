@@ -32,6 +32,38 @@ def test_meal_classifies_dinner_from_pasta_title() -> None:
     assert result == "Dinner"
 
 
+def test_meal_pasta_primavera_is_dinner_not_snack_side() -> None:
+    assert classify_column("Meal", "Pasta Primavera", [], allowed_options=MEAL_OPTIONS) == "Dinner"
+    assert (
+        classify_column(
+            "Meal",
+            "Pasta Primavera",
+            ["1 lb fusilli", "asparagus", "salad greens"],
+            allowed_options=MEAL_OPTIONS,
+        )
+        == "Dinner"
+    )
+    assert (
+        classify_column(
+            "Meal",
+            "Pasta Primavera",
+            ["Crusty bread or focaccia, for serving"],
+            allowed_options=MEAL_OPTIONS,
+        )
+        == "Dinner"
+    )
+    assert (
+        classify_column(
+            "Meal",
+            "Pasta Primavera",
+            ["Pita chips or another snack, for serving"],
+            allowed_options=MEAL_OPTIONS,
+        )
+        == "Dinner"
+    )
+    assert classify_column("Meal", "Primavera", [], allowed_options=MEAL_OPTIONS) == "Dinner"
+
+
 def test_meal_classifies_breakfast_from_title() -> None:
     result = classify_column(
         "Meal",

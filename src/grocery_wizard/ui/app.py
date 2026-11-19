@@ -28,6 +28,7 @@ from src.grocery_wizard.ui.access_gate import enforce_access_gate
 from src.grocery_wizard.ui.app_title import render_app_title
 from src.grocery_wizard.ui.db_access import get_db
 from src.grocery_wizard.ui.dropdown_dismiss import install_dropdown_dismiss
+from src.grocery_wizard.ui.external_links import install_external_links
 from src.grocery_wizard.ui.feedback import render_feedback_controls
 from src.grocery_wizard.ui.ids import (
     CONTROL_GLOBAL_FEEDBACK,
@@ -186,6 +187,7 @@ def main() -> None:
     _render_page_body(active_slug)
 
     install_dropdown_dismiss()
+    install_external_links()
 
 
 if __name__ == "__main__":
