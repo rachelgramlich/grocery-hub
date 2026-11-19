@@ -14,6 +14,7 @@ from src.grocery_wizard.integrations.nyt_cooking import (
     default_orphan_target_folder,
     file_orphans_into_folder,
     format_metadata_review,
+    format_notion_sync_outcome_message,
     format_orphan_file_summary,
     format_sync_summary,
     list_orphan_recipes,
@@ -346,11 +347,18 @@ def _execute_nyt_recipe_box_sync(
             "Dry run finished — Notion was not updated. "
             "Uncheck dry run and choose Sync to Notion to write new recipes."
         )
-    elif summary.created:
+    elif summary.notion_writes:
         invalidate_recipes_after_write(schema_may_change=True)
-        st.success(f"Notion updated — added {summary.created} new recipe(s).")
+        outcome_kind, outcome_message = format_notion_sync_outcome_message(summary)
+        if outcome_kind == "success":
+            st.success(outcome_message)
+        elif outcome_kind == "warning":
+            st.warning(outcome_message)
+        else:
+            st.info(outcome_message)
     else:
-        st.success("Notion updated — no new recipes were needed (already up to date).")
+        _outcome_kind, outcome_message = format_notion_sync_outcome_message(summary)
+        st.info(outcome_message)
 
     if result.review_report:
         with st.expander("Metadata review", expanded=bool(result.review_report.get("created"))):

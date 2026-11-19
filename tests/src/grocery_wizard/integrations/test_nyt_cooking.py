@@ -373,11 +373,47 @@ def test_sync_skips_existing_links(credentials: NytCredentials) -> None:
 
     db = MagicMock()
     db.find_by_link.return_value = MagicMock(name="Already There")
+    db.nyt_synced_column_name.return_value = None
 
     with patch("src.grocery_wizard.recipes.add_recipe.add_prefetched_recipes") as add_mock:
         summary = sync_saved_recipes_to_notion(db, client)
 
     assert summary.skipped_existing == 1
+    assert summary.updated_existing == 0
+    add_mock.assert_not_called()
+
+
+def test_sync_tags_existing_when_nyt_checkbox_unset(credentials: NytCredentials) -> None:
+    session = MagicMock()
+    client = NYTCookingClient(credentials, session=session)
+    session.get.return_value = _mock_response(
+        payload={
+            "collectables": [
+                {
+                    "id": "1",
+                    "name": "Existing",
+                    "url": "https://cooking.nytimes.com/recipes/1-existing",
+                }
+            ],
+            "collectables_count": 1,
+        }
+    )
+
+    db = MagicMock()
+    existing = MagicMock(
+        name="Already There",
+        page_id="page-1",
+        properties={"Synced from NYT recipe box": False},
+    )
+    db.find_by_link.return_value = existing
+    db.nyt_synced_column_name.return_value = "Synced from NYT recipe box"
+
+    with patch("src.grocery_wizard.recipes.add_recipe.add_prefetched_recipes") as add_mock:
+        summary = sync_saved_recipes_to_notion(db, client)
+
+    assert summary.skipped_existing == 1
+    assert summary.updated_existing == 1
+    db.update_recipe.assert_called_once_with("page-1", {"Synced from NYT recipe box": True})
     add_mock.assert_not_called()
 
 
@@ -825,11 +861,28 @@ def test_format_sync_summary_includes_counts() -> None:
     from src.grocery_wizard.integrations.nyt_cooking import NytSyncSummary, format_sync_summary
 
     text = format_sync_summary(
-        NytSyncSummary(total=10, skipped_existing=3, created=2, dry_run=0, failed=1)
+        NytSyncSummary(
+            total=10, skipped_existing=3, updated_existing=1, created=2, dry_run=0, failed=1
+        )
     )
-    assert "10 in NYT" in text
-    assert "3 already in Notion" in text
-    assert "2 created" in text
+    assert "10 in NYT folder" in text
+    assert "3 matched existing" in text
+    assert "2 new page" in text
+    assert "1 existing page(s) tagged" in text
+
+
+def test_format_notion_sync_outcome_no_writes_when_all_skipped() -> None:
+    from src.grocery_wizard.integrations.nyt_cooking import (
+        NytSyncSummary,
+        format_notion_sync_outcome_message,
+    )
+
+    kind, message = format_notion_sync_outcome_message(
+        NytSyncSummary(total=190, skipped_existing=190)
+    )
+    assert kind == "info"
+    assert "No Notion changes" in message
+    assert "Notion updated" not in message
 
 
 def test_add_prefetched_recipes_cleans_ingredients_like_the_add_recipe_flow() -> None:
