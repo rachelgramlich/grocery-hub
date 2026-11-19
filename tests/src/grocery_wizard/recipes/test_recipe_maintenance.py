@@ -8,6 +8,7 @@ from src.grocery_wizard.integrations.notion import ColumnInfo, DatabaseSchema, R
 from src.grocery_wizard.recipes.recipe_maintenance import (
     BackfillSummary,
     _resolve_total_minutes,
+    format_backfill_failed_line,
     infer_metadata_field_values,
     is_blank_metadata_value,
     recipe_has_cover_image,
@@ -16,6 +17,7 @@ from src.grocery_wizard.recipes.recipe_maintenance import (
     recipe_missing_cover_image,
     recipe_missing_ingredients,
     recipe_missing_metadata,
+    recipe_notion_markdown_link,
     recipe_possibly_missing_all_checkboxes,
     recipes_invalid_dinner_category,
     recipes_missing_ingredients,
@@ -219,15 +221,36 @@ def test_run_ingredients_backfill_counts_scrape_errors() -> None:
     db = MagicMock()
     db.schema = schema
     candidate = _recipe(ingredients="")
+    lines: list[str] = []
 
     with patch(
         "src.grocery_wizard.recipes.recipe_maintenance.scrape_recipe",
         side_effect=ScrapeError("blocked"),
     ):
-        summary = run_ingredients_backfill(db, [candidate])
+        summary = run_ingredients_backfill(
+            db,
+            [candidate],
+            on_progress=lines.append,
+        )
 
     assert summary.failed == 1
     db.update_recipe.assert_not_called()
+    assert len(lines) == 2
+    assert lines[1] == format_backfill_failed_line(candidate, "blocked")
+    assert "notion.so/page1" in lines[1]
+
+
+def test_recipe_notion_markdown_link_escapes_brackets() -> None:
+    recipe = Recipe(
+        page_id="abc-def",
+        name="Spicy [test] chicken",
+        link="https://example.com",
+        ingredients="",
+        properties={},
+    )
+    linked = recipe_notion_markdown_link(recipe)
+    assert linked.startswith("[Spicy \\[test\\] chicken]")
+    assert linked.endswith("(https://www.notion.so/abcdef)")
 
 
 def test_recipe_has_invalid_dinner_category() -> None:

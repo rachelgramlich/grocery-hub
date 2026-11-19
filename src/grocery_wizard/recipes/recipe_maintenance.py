@@ -14,6 +14,7 @@ from src.grocery_wizard.integrations.notion import (
     NotionFieldValues,
     NotionRecipesDB,
     Recipe,
+    notion_page_url,
 )
 from src.grocery_wizard.recipes.add_recipe import _weeknight_column_name
 from src.grocery_wizard.recipes.classify import MEALS_WITHOUT_DINNER_CATEGORY, classify_recipe
@@ -542,6 +543,25 @@ def run_common_metadata_repair(
     return result
 
 
+def _markdown_link_label(text: str) -> str:
+    """Escape brackets so recipe titles are safe inside Markdown link text."""
+    return text.replace("\\", "\\\\").replace("[", "\\[").replace("]", "\\]")
+
+
+def recipe_notion_markdown_link(recipe: Recipe) -> str:
+    """Recipe name as a Markdown link to its Notion page, or plain text when no page id."""
+    page_id = (recipe.page_id or "").strip()
+    label = _markdown_link_label(recipe.name)
+    if not page_id:
+        return label
+    return f"[{label}]({notion_page_url(page_id)})"
+
+
+def format_backfill_failed_line(recipe: Recipe, reason: str) -> str:
+    """Progress line for a failed recipe row (includes a Notion link when possible)."""
+    return f"Failed: {recipe_notion_markdown_link(recipe)} — {reason}"
+
+
 def run_ingredients_backfill(
     db: NotionRecipesDB,
     candidates: list[Recipe],
@@ -575,7 +595,7 @@ def run_ingredients_backfill(
         except ScrapeError as exc:
             summary.failed += 1
             if on_progress:
-                on_progress(f"Failed: {recipe.name} — {exc}")
+                on_progress(format_backfill_failed_line(recipe, str(exc)))
             continue
 
         if not scraped.ingredients:
@@ -631,7 +651,7 @@ def run_metadata_backfill(
         except Exception as exc:
             summary.failed += 1
             if on_progress:
-                on_progress(f"Failed: {recipe.name} — {exc}")
+                on_progress(format_backfill_failed_line(recipe, str(exc)))
             continue
 
         if not updates:
@@ -693,7 +713,7 @@ def run_image_backfill(
         except ImageResolveError as exc:
             summary.failed += 1
             if on_progress:
-                on_progress(f"Failed: {recipe.name} — {exc}")
+                on_progress(format_backfill_failed_line(recipe, str(exc)))
             continue
 
         if dry_run:
@@ -710,7 +730,7 @@ def run_image_backfill(
         except Exception as exc:
             summary.failed += 1
             if on_progress:
-                on_progress(f"Failed: {recipe.name} — {exc}")
+                on_progress(format_backfill_failed_line(recipe, str(exc)))
             continue
         if result.ok:
             summary.succeeded += 1
@@ -719,7 +739,12 @@ def run_image_backfill(
         else:
             summary.failed += 1
             if on_progress:
-                on_progress(f"Failed: {recipe.name} — {result.error or 'upload failed'}")
+                on_progress(
+                    format_backfill_failed_line(
+                        recipe,
+                        result.error or "upload failed",
+                    )
+                )
 
     if on_fraction:
         on_fraction(1.0)

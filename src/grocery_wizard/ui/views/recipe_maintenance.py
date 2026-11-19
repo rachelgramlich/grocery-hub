@@ -50,6 +50,14 @@ def _nyt_client_if_configured() -> NYTCookingClient | None:
     return NYTCookingClient()
 
 
+def _write_backfill_progress_line(line: str) -> None:
+    """Render a backfill log line; failed rows use Markdown links into Notion."""
+    if line.startswith("Failed:") and "](https://" in line:
+        st.markdown(line)
+    else:
+        st.write(line)
+
+
 def _run_backfill_with_progress(
     *,
     label: str,
@@ -67,7 +75,7 @@ def _run_backfill_with_progress(
     with st.status(label, expanded=True) as status:
         summary = runner(on_progress=on_progress, on_fraction=on_fraction)
         for line in progress_lines[-40:]:
-            st.write(line)
+            _write_backfill_progress_line(line)
         outcome = format_backfill_summary(label, summary)
         status.update(label=outcome, state="complete")
 
