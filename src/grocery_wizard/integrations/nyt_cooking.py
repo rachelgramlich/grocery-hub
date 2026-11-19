@@ -11,6 +11,7 @@ __all__ = [
     "NytCredentials",
     "NytNetworkError",
     "NytNotFoundError",
+    "NytOrphanFileSummary",
     "NytRecipe",
     "NytRecipeBoxFolder",
     "NytSavedRecipe",
@@ -19,9 +20,14 @@ __all__ = [
     "NytSyncRunResult",
     "NytSyncSummary",
     "credentials_status",
+    "default_orphan_target_folder",
+    "file_orphans_into_folder",
     "format_metadata_review",
+    "format_orphan_file_summary",
     "format_sync_summary",
+    "list_orphan_recipes",
     "list_recipe_box_folders",
+    "list_recipe_ids_in_any_folder",
     "load_credentials",
     "load_sync_report",
     "prompt_collection_choice",
@@ -33,6 +39,7 @@ __all__ = [
 import json
 import os
 import re
+import time
 from collections.abc import Callable, Iterator
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
@@ -53,6 +60,9 @@ USER_AGENT = (
 )
 REQUEST_TIMEOUT = 30
 DEFAULT_PER_PAGE = 48
+DEFAULT_NYT_ORPHAN_FOLDER = "1 to make"
+NYT_ORPHAN_FOLDER_ENV = "GROCERY_WIZARD_NYT_ORPHAN_FOLDER"
+DEFAULT_ORPHAN_FILE_DELAY_SECONDS = 0.25
 
 _REGI_ID_PATTERN = re.compile(r"regi_id=(\d+)", re.IGNORECASE)
 _HTML_TAGS = re.compile(r"<[^>]+>")
@@ -221,11 +231,17 @@ class NYTCookingClient:
         self._http = session or requests.Session()
         self._http.headers["User-Agent"] = USER_AGENT
         if self._credentials:
-            self._http.cookies.set(
-                "NYT-S",
-                self._credentials.nyt_s_cookie,
-                domain=".nytimes.com",
-            )
+            self._apply_nyt_cookie()
+
+    def _apply_nyt_cookie(self) -> None:
+        """Re-apply NYT-S before each request; NYT may drop it on responses."""
+        if self._credentials is None:
+            return
+        self._http.cookies.set(
+            "NYT-S",
+            self._credentials.nyt_s_cookie,
+            domain=".nytimes.com",
+        )
 
     @property
     def credentials(self) -> NytCredentials | None:
@@ -240,6 +256,7 @@ class NYTCookingClient:
         return self._credentials
 
     def _get(self, url: str, **kwargs: Any) -> requests.Response:
+        self._apply_nyt_cookie()
         try:
             response = self._http.get(url, timeout=REQUEST_TIMEOUT, **kwargs)
         except requests.RequestException as exc:
@@ -253,6 +270,30 @@ class NYTCookingClient:
             raise NytNotFoundError(f"Nothing found at {url}.")
         if not response.ok:
             raise NytNetworkError(f"NYT Cooking returned HTTP {response.status_code}.")
+        return response
+
+    def _post(self, url: str, **kwargs: Any) -> requests.Response:
+        self._apply_nyt_cookie()
+        try:
+            response = self._http.post(url, timeout=REQUEST_TIMEOUT, **kwargs)
+        except requests.RequestException as exc:
+            raise NytNetworkError(str(exc)) from exc
+        if response.status_code in (401, 403):
+            raise NytAuthError(
+                "NYT Cooking rejected the request — cookie missing, invalid, or expired."
+            )
+        return response
+
+    def _delete(self, url: str, **kwargs: Any) -> requests.Response:
+        self._apply_nyt_cookie()
+        try:
+            response = self._http.delete(url, timeout=REQUEST_TIMEOUT, **kwargs)
+        except requests.RequestException as exc:
+            raise NytNetworkError(str(exc)) from exc
+        if response.status_code in (401, 403):
+            raise NytAuthError(
+                "NYT Cooking rejected the request — cookie missing, invalid, or expired."
+            )
         return response
 
     def _json(self, response: requests.Response, what: str) -> dict[str, Any]:
@@ -301,6 +342,50 @@ class NYTCookingClient:
                 return collection
         return None
 
+    def create_collection(self, name: str) -> NytCollection:
+        """Create a recipe-box folder (collection)."""
+        self._require_credentials()
+        response = self._post(
+            f"{SITE}/api/v5/users/me/collections",
+            json={"name": name},
+            headers={**API_HEADERS, "Content-Type": "application/json"},
+        )
+        if response.status_code != 201:
+            raise NytNetworkError(
+                f"NYT Cooking returned HTTP {response.status_code} creating collection."
+            )
+        payload = self._json(response, "Collection")
+        return NytCollection(
+            id=str(payload.get("id", "")),
+            name=str(payload.get("name", name)),
+            recipe_count=0,
+        )
+
+    def ensure_collection(self, name: str) -> NytCollection:
+        """Return existing folder by name or create it."""
+        existing = self.find_collection_by_name(name)
+        if existing is not None:
+            return existing
+        return self.create_collection(name)
+
+    def collection_recipe_ids(self, collection_id: str | int) -> list[str]:
+        """Recipe ids in a folder via GET /api/v5/collections/{id}."""
+        self._require_credentials()
+        response = self._get(
+            f"{SITE}/api/v5/collections/{int(collection_id)}",
+            headers=API_HEADERS,
+        )
+        col = self._json(response, "Collection detail").get("collection") or {}
+        ids: list[str] = []
+        for item in col.get("collectables") or []:
+            if not isinstance(item, dict):
+                continue
+            recipe_id = item.get("recipe_id")
+            item_type = str(item.get("type") or "")
+            if recipe_id is not None and item_type in ("", "recipe"):
+                ids.append(str(recipe_id))
+        return ids
+
     def list_saved_recipes(
         self,
         *,
@@ -309,17 +394,18 @@ class NYTCookingClient:
         collection_id: str | None = None,
     ) -> dict[str, Any]:
         """Return one page of saved recipes from the recipe box."""
-        creds = self._require_credentials()
+        self._require_credentials()
         params: dict[str, str | int] = {
             "q": "",
             "page": page,
             "per_page": per_page,
+            "sort": "rating",
         }
         if collection_id:
             params["collection_id"] = collection_id
 
         response = self._get(
-            f"{SITE}/api/v2/users/{creds.regi_id}/search/recipe_box_search",
+            f"{SITE}/api/v2/users/me/search/recipe_box_search",
             params=params,
             headers=API_HEADERS,
         )
@@ -332,6 +418,7 @@ class NYTCookingClient:
         per_page: int = DEFAULT_PER_PAGE,
     ) -> Iterator[NytSavedRecipe]:
         """Yield every saved recipe, paging through the recipe box."""
+        seen: set[str] = set()
         page = 1
         while True:
             payload = self.list_saved_recipes(
@@ -340,20 +427,81 @@ class NYTCookingClient:
                 collection_id=collection_id,
             )
             items = payload.get("collectables") or []
+            if not items:
+                break
             for item in items:
                 if not isinstance(item, dict):
                     continue
+                rid = str(item.get("id", ""))
+                if not rid or rid in seen:
+                    continue
+                seen.add(rid)
                 yield NytSavedRecipe(
-                    id=str(item.get("id", "")),
+                    id=rid,
                     name=str(item.get("name", "")),
                     url=_absolute_url(str(item.get("url", ""))),
                     author=item.get("byline"),
                 )
 
+            meta = payload.get("meta") or {}
+            total_pages = int(meta.get("total_pages") or 0)
+            if total_pages and page >= total_pages:
+                break
             total = int(payload.get("collectables_count") or 0)
-            if page * per_page >= total or not items:
+            if total and page * per_page >= total:
                 break
             page += 1
+
+    def save_recipe(self, recipe_id: int | str) -> int:
+        """Save an NYT recipe to the recipe box. Returns HTTP 201 or 409."""
+        creds = self._require_credentials()
+        response = self._post(
+            f"{SITE}/api/v2/users/{creds.regi_id}/collectables/recipe",
+            json={"id": int(recipe_id)},
+            headers={**API_HEADERS, "Content-Type": "application/json"},
+        )
+        if response.status_code not in (201, 409):
+            raise NytNetworkError(
+                f"NYT Cooking returned HTTP {response.status_code} saving recipe."
+            )
+        return response.status_code
+
+    def unsave_recipe(self, recipe_id: int | str) -> int:
+        """Remove a recipe from the recipe box."""
+        creds = self._require_credentials()
+        response = self._delete(
+            f"{SITE}/api/v2/users/{creds.regi_id}/collectables/recipe/{int(recipe_id)}",
+            headers=API_HEADERS,
+        )
+        if response.status_code not in (204, 404):
+            raise NytNetworkError(
+                f"NYT Cooking returned HTTP {response.status_code} unsaving recipe."
+            )
+        return response.status_code
+
+    def add_to_collection(self, collection_id: str | int, recipe_id: int | str) -> int:
+        """Add a saved recipe to a folder. Returns HTTP 201 or 409."""
+        self._require_credentials()
+        response = self._post(
+            f"{SITE}/api/v5/collections/{int(collection_id)}/collectables",
+            json={"recipe_id": int(recipe_id)},
+            headers={**API_HEADERS, "Content-Type": "application/json"},
+        )
+        if response.status_code not in (201, 409):
+            raise NytNetworkError(
+                f"NYT Cooking returned HTTP {response.status_code} adding to collection."
+            )
+        return response.status_code
+
+    def save_recipe_to_collection(
+        self,
+        collection_id: str | int,
+        recipe_id: int | str,
+    ) -> tuple[int, int]:
+        """Save to recipe box, then add to folder."""
+        save_status = self.save_recipe(recipe_id)
+        folder_status = self.add_to_collection(collection_id, recipe_id)
+        return save_status, folder_status
 
     def get_recipe(self, recipe_id: str) -> NytRecipe:
         """Fetch full recipe details from the JSON recipe endpoint."""
@@ -379,6 +527,104 @@ class NYTCookingClient:
             ingredients=recipe.ingredients,
             author=recipe.author,
         )
+
+
+def default_orphan_target_folder() -> str:
+    """Default NYT folder for filing unfiled recipes (Streamlit + scripts)."""
+    custom = os.getenv(NYT_ORPHAN_FOLDER_ENV, "").strip()
+    if custom:
+        return custom
+    return DEFAULT_NYT_ORPHAN_FOLDER
+
+
+def list_recipe_ids_in_any_folder(client: NYTCookingClient) -> set[str]:
+    """Recipe ids that appear in at least one recipe-box folder."""
+    ids: set[str] = set()
+    for collection in client.list_collections():
+        ids.update(client.collection_recipe_ids(collection.id))
+    return ids
+
+
+def list_orphan_recipes(client: NYTCookingClient) -> list[NytSavedRecipe]:
+    """Saved recipes in the recipe box that are not in any folder."""
+    in_folders = list_recipe_ids_in_any_folder(client)
+    return [recipe for recipe in client.iter_all_saved_recipes() if recipe.id not in in_folders]
+
+
+@dataclass
+class NytOrphanFileSummary:
+    orphans_total: int = 0
+    added: int = 0
+    already_in_folder: int = 0
+    failed: int = 0
+    dry_run: bool = False
+    target_folder: str = ""
+    failed_ids: list[str] = field(default_factory=list)
+
+
+def format_orphan_file_summary(summary: NytOrphanFileSummary) -> str:
+    if summary.dry_run:
+        return (
+            f"Preview: {summary.orphans_total} unfiled recipe(s) would be added to "
+            f"'{summary.target_folder}' on NYT Cooking."
+        )
+    return (
+        f"Filing complete: added {summary.added}, already in folder {summary.already_in_folder}, "
+        f"failed {summary.failed} (target '{summary.target_folder}')."
+    )
+
+
+def file_orphans_into_folder(
+    client: NYTCookingClient,
+    *,
+    folder_name: str | None = None,
+    dry_run: bool = False,
+    delay_seconds: float = DEFAULT_ORPHAN_FILE_DELAY_SECONDS,
+    on_progress: NytSyncProgressCallback | None = None,
+) -> NytOrphanFileSummary:
+    """Add unfiled saved recipes to a folder (does not remove other folder memberships)."""
+    target = (folder_name or default_orphan_target_folder()).strip()
+    orphans = list_orphan_recipes(client)
+    summary = NytOrphanFileSummary(
+        orphans_total=len(orphans),
+        dry_run=dry_run,
+        target_folder=target,
+    )
+    if dry_run or not orphans:
+        _notify_sync_progress(
+            on_progress,
+            format_orphan_file_summary(summary),
+            processed=0,
+            total=len(orphans) or None,
+        )
+        return summary
+
+    folder = client.ensure_collection(target)
+    total = len(orphans)
+    for index, recipe in enumerate(orphans, start=1):
+        try:
+            status = client.add_to_collection(folder.id, recipe.id)
+            if status == 201:
+                summary.added += 1
+                message = f"Added: {recipe.name}"
+            else:
+                summary.already_in_folder += 1
+                message = f"Already in folder: {recipe.name}"
+        except NYTCookingError:
+            summary.failed += 1
+            summary.failed_ids.append(recipe.id)
+            message = f"Failed: {recipe.name}"
+        _notify_sync_progress(on_progress, message, processed=index, total=total)
+        if delay_seconds > 0 and index < total:
+            time.sleep(delay_seconds)
+
+    _notify_sync_progress(
+        on_progress,
+        format_orphan_file_summary(summary),
+        processed=total,
+        total=total,
+    )
+    return summary
 
 
 def _recipe_box_total_count(client: NYTCookingClient) -> int | None:
@@ -454,11 +700,16 @@ class NytCreatedRecipe:
 class NytSyncSummary:
     total: int = 0
     skipped_existing: int = 0
+    updated_existing: int = 0
     created: int = 0
     failed: int = 0
     dry_run: int = 0
     collection_label: str | None = None
     created_recipes: list[NytCreatedRecipe] = field(default_factory=list)
+
+    @property
+    def notion_writes(self) -> int:
+        return self.created + self.updated_existing
 
 
 @dataclass(frozen=True, slots=True)
@@ -593,12 +844,23 @@ def _process_saved_recipe_in_sync(
     existing = db.find_by_link(url)
     if existing:
         summary.skipped_existing += 1
-        _notify_sync_progress(
-            on_progress,
-            f"Skip (already in Notion): {existing.name}",
-            processed=processed,
-            total=recipe_total,
-        )
+        nyt_column = db.nyt_synced_column_name()
+        if not dry_run and nyt_column and existing.properties.get(nyt_column) is not True:
+            db.update_recipe(existing.page_id, {nyt_column: True})
+            summary.updated_existing += 1
+            _notify_sync_progress(
+                on_progress,
+                f"Tagged existing (link match): {existing.name}",
+                processed=processed,
+                total=recipe_total,
+            )
+        else:
+            _notify_sync_progress(
+                on_progress,
+                f"Skip (link already in Notion): {existing.name}",
+                processed=processed,
+                total=recipe_total,
+            )
         return
 
     total_minutes, ingredients = _fetch_nyt_recipe_for_sync(client, saved.id, saved.url)
@@ -757,12 +1019,47 @@ def _sync_report_from_summary(summary: NytSyncSummary) -> dict[str, Any]:
 def format_sync_summary(summary: NytSyncSummary) -> str:
     """One-line counts after a sync or dry run."""
     return (
-        f"Sync complete: {summary.total} in NYT, "
-        f"{summary.skipped_existing} already in Notion, "
-        f"{summary.created} created, "
+        f"Sync complete: {summary.total} in NYT folder, "
+        f"{summary.skipped_existing} matched existing Notion link(s), "
+        f"{summary.created} new page(s) created, "
+        f"{summary.updated_existing} existing page(s) tagged, "
         f"{summary.dry_run} would add, "
         f"{summary.failed} failed."
     )
+
+
+def format_notion_sync_outcome_message(summary: NytSyncSummary) -> tuple[str, str]:
+    """Return (streamlit_message_kind, user-facing sentence) after a live sync."""
+    if summary.created and summary.updated_existing:
+        return (
+            "success",
+            (
+                f"Notion updated — added {summary.created} new recipe(s) and tagged "
+                f"{summary.updated_existing} existing match(es) with the NYT sync checkbox."
+            ),
+        )
+    if summary.created:
+        return ("success", f"Notion updated — added {summary.created} new recipe(s).")
+    if summary.updated_existing:
+        return (
+            "success",
+            (
+                f"Notion updated — tagged {summary.updated_existing} existing recipe(s) "
+                f"(link already in Notion; no new pages)."
+            ),
+        )
+    if summary.skipped_existing:
+        return (
+            "info",
+            (
+                f"No Notion changes — all {summary.skipped_existing} recipe(s) already had a "
+                "matching link and NYT sync checkbox. New NYT saves only create Notion pages when "
+                "the cooking.nytimes.com URL is not already on a card."
+            ),
+        )
+    if summary.failed:
+        return ("warning", f"Sync finished with {summary.failed} failure(s) and no new pages.")
+    return ("info", "Sync finished — no recipes were processed.")
 
 
 def run_recipe_box_sync(
@@ -881,6 +1178,7 @@ def save_sync_report(summary: NytSyncSummary, path: Path = NYT_LAST_SYNC_PATH) -
         "counts": {
             "total": summary.total,
             "skipped_existing": summary.skipped_existing,
+            "updated_existing": summary.updated_existing,
             "created": summary.created,
             "dry_run": summary.dry_run,
             "failed": summary.failed,
@@ -945,6 +1243,7 @@ class NytReclassifySummary:
     meal_changes: int = 0
     weeknight_set: int = 0
     weeknight_cleared: int = 0
+    dinner_category_cleared: int = 0
     unchanged: int = 0
     api_failures: int = 0
     changes: list[NytReclassifyChange] = field(default_factory=list)
@@ -957,6 +1256,24 @@ def _require_nyt_synced_column(db: Any) -> str:
             f"NYT synced checkbox column not found. Add '{DEFAULT_NYT_SYNCED_COLUMN}' to Notion."
         )
     return nyt_column
+
+
+def _reclassify_ingredient_lines(recipe: Any) -> list[str]:
+    from src.grocery_wizard.ingredients.sync import parse_ingredients_text
+
+    raw = (recipe.ingredients or "").replace("<br />", "\n").replace("<br>", "\n")
+    lines, _ = parse_ingredients_text(raw)
+    if lines:
+        return lines
+    return [line.strip() for line in raw.splitlines() if line.strip()]
+
+
+def _dinner_category_column_name(schema: Any) -> str:
+    from src.grocery_wizard.recipes.recipe_schema_columns import (
+        dinner_lunch_category_column_from_schema,
+    )
+
+    return dinner_lunch_category_column_from_schema(schema) or ""
 
 
 def _weeknight_column_for_reclassify(db: Any) -> str:
@@ -993,13 +1310,20 @@ def _fetch_reclassify_total_minutes(
 def _build_reclassify_field_updates(
     recipe: Any,
     *,
+    schema: Any,
     new_meal: Any,
     old_meal: Any,
     total_minutes: float | None,
     weeknight_column: str,
+    dinner_category_column: str,
     summary: NytReclassifySummary,
 ) -> dict[str, Any]:
     # Lazy import: weeknight helper used only during NYT reclassify updates.
+    from src.grocery_wizard.recipes.classify import MEALS_WITHOUT_DINNER_CATEGORY
+    from src.grocery_wizard.recipes.recipe_maintenance import (
+        is_blank_metadata_value,
+        normalize_meal_values,
+    )
     from src.grocery_wizard.recipes.weeknight import is_weeknight_friendly
 
     title = recipe.name
@@ -1039,6 +1363,34 @@ def _build_reclassify_field_updates(
                     field=weeknight_column,
                     old_value=old_weeknight,
                     new_value=new_weeknight,
+                )
+            )
+
+    effective_meal = fields.get("Meal", old_meal)
+    meals = normalize_meal_values(effective_meal)
+    if dinner_category_column and meals & MEALS_WITHOUT_DINNER_CATEGORY:
+        from src.grocery_wizard.recipes.recipe_schema_columns import (
+            dinner_lunch_category_na_option,
+            is_dinner_lunch_category_na_only,
+        )
+
+        col = schema.all_columns.get(dinner_category_column)
+        na_label = dinner_lunch_category_na_option(col.options) if col else None
+        current_dinner_category = recipe.properties.get(dinner_category_column)
+        needs_na = na_label and (
+            is_blank_metadata_value("multi_select", current_dinner_category)
+            or not is_dinner_lunch_category_na_only(current_dinner_category, na_label=na_label)
+        )
+        if needs_na:
+            fields[dinner_category_column] = [na_label]
+            summary.dinner_category_cleared += 1
+            summary.changes.append(
+                NytReclassifyChange(
+                    page_id=recipe.page_id,
+                    name=title,
+                    field=dinner_category_column,
+                    old_value=current_dinner_category,
+                    new_value=[na_label],
                 )
             )
 
@@ -1082,6 +1434,7 @@ def reclassify_nyt_synced_recipes(
     nyt_column = _require_nyt_synced_column(db)
     weeknight_column = _weeknight_column_for_reclassify(db)
     filter_columns = filter_columns_for_recipe_classify(db.schema.filter_columns)
+    dinner_category_column = _dinner_category_column_name(db.schema)
     summary = NytReclassifySummary()
 
     for recipe in db.query_recipes():
@@ -1090,7 +1443,11 @@ def reclassify_nyt_synced_recipes(
 
         summary.total += 1
         title = recipe.name
-        inferred = classify_recipe(title, [], filter_columns)
+        inferred = classify_recipe(
+            title,
+            _reclassify_ingredient_lines(recipe),
+            filter_columns,
+        )
         new_meal = inferred.get("Meal")
         old_meal = recipe.properties.get("Meal")
 
@@ -1099,10 +1456,12 @@ def reclassify_nyt_synced_recipes(
         )
         fields = _build_reclassify_field_updates(
             recipe,
+            schema=db.schema,
             new_meal=new_meal,
             old_meal=old_meal,
             total_minutes=total_minutes,
             weeknight_column=weeknight_column,
+            dinner_category_column=dinner_category_column,
             summary=summary,
         )
         _apply_reclassify_recipe_updates(
@@ -1123,6 +1482,7 @@ def format_reclassify_summary(summary: NytReclassifySummary) -> str:
         f"Meal changes: {summary.meal_changes}",
         f"Weeknight friendly set: {summary.weeknight_set}",
         f"Weeknight friendly cleared: {summary.weeknight_cleared}",
+        f"Dinner category cleared: {summary.dinner_category_cleared}",
         f"Unchanged: {summary.unchanged}",
     ]
     if summary.api_failures:

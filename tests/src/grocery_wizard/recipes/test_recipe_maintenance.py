@@ -6,20 +6,28 @@ from unittest.mock import MagicMock, patch
 
 from src.grocery_wizard.integrations.notion import ColumnInfo, DatabaseSchema, Recipe
 from src.grocery_wizard.recipes.recipe_maintenance import (
+    BackfillSummary,
     _resolve_total_minutes,
+    format_backfill_failed_line,
     infer_metadata_field_values,
     is_blank_metadata_value,
     recipe_has_cover_image,
+    recipe_has_invalid_dinner_category,
     recipe_manual_ingredients_in_notion,
     recipe_missing_cover_image,
     recipe_missing_ingredients,
     recipe_missing_metadata,
+    recipe_notion_markdown_link,
     recipe_possibly_missing_all_checkboxes,
+    recipes_invalid_dinner_category,
     recipes_missing_ingredients,
     recipes_missing_metadata,
+    run_common_metadata_repair,
     run_image_backfill,
     run_ingredients_backfill,
     run_metadata_backfill,
+    run_normalize_protein_none_to_na,
+    run_strip_invalid_dinner_categories,
 )
 from src.grocery_wizard.recipes.scraper import ScrapedRecipe, ScrapeError
 
@@ -32,11 +40,15 @@ def _full_schema(*, filter_columns_only_meal: bool = False) -> DatabaseSchema:
     meal = ColumnInfo(name="Meal", type="select", options=["Dinner", "Dessert", "Lunch"])
     weeknight = ColumnInfo(name="Dinner: Weeknight Friendly", type="checkbox", options=[])
     cuisine = ColumnInfo(name="Cuisine", type="multi_select", options=["Italian"])
-    protein = ColumnInfo(name="Protein", type="multi_select", options=["Chicken"])
+    protein = ColumnInfo(
+        name="Protein",
+        type="multi_select",
+        options=["N/A", "None", "Chicken"],
+    )
     dinner_category = ColumnInfo(
         name="Dinner Category",
         type="multi_select",
-        options=["Pasta"],
+        options=["Pasta", "N/A"],
     )
     filter_columns = [meal]
     if not filter_columns_only_meal:
@@ -127,7 +139,7 @@ def test_unchecked_weeknight_counts_as_gap_for_dinner() -> None:
     )
 
 
-def test_dessert_skips_protein_and_dinner_category_gaps() -> None:
+def test_dessert_needs_na_dinner_category_but_not_protein() -> None:
     schema = _full_schema()
     props = {
         "Meal": "Dessert",
@@ -143,7 +155,17 @@ def test_dessert_skips_protein_and_dinner_category_gaps() -> None:
         ingredients="flour",
         properties=props,
     )
-    assert not recipe_missing_metadata(recipe, schema)
+    assert recipe_missing_metadata(recipe, schema)
+
+    props["Dinner Category"] = ["N/A"]
+    recipe_ok = Recipe(
+        page_id="page-1",
+        name="Brownies",
+        link="https://example.com/r",
+        ingredients="flour",
+        properties=props,
+    )
+    assert not recipe_missing_metadata(recipe_ok, schema)
 
 
 def test_is_blank_metadata_value() -> None:
@@ -199,15 +221,122 @@ def test_run_ingredients_backfill_counts_scrape_errors() -> None:
     db = MagicMock()
     db.schema = schema
     candidate = _recipe(ingredients="")
+    lines: list[str] = []
 
     with patch(
         "src.grocery_wizard.recipes.recipe_maintenance.scrape_recipe",
         side_effect=ScrapeError("blocked"),
     ):
-        summary = run_ingredients_backfill(db, [candidate])
+        summary = run_ingredients_backfill(
+            db,
+            [candidate],
+            on_progress=lines.append,
+        )
 
     assert summary.failed == 1
     db.update_recipe.assert_not_called()
+    assert len(lines) == 2
+    assert lines[1] == format_backfill_failed_line(candidate, "blocked")
+    assert "notion.so/page1" in lines[1]
+
+
+def test_recipe_notion_markdown_link_escapes_brackets() -> None:
+    recipe = Recipe(
+        page_id="abc-def",
+        name="Spicy [test] chicken",
+        link="https://example.com",
+        ingredients="",
+        properties={},
+    )
+    linked = recipe_notion_markdown_link(recipe)
+    assert linked.startswith("[Spicy \\[test\\] chicken]")
+    assert linked.endswith("(https://www.notion.so/abcdef)")
+
+
+def test_recipe_has_invalid_dinner_category() -> None:
+    schema = _full_schema()
+    dessert_wrong = _recipe(meal="Dessert")
+    dessert_wrong.properties["Dinner Category"] = ["Pasta"]
+    dessert_ok = _recipe(meal="Dessert")
+    dessert_ok.properties["Dinner Category"] = ["N/A"]
+    dinner_ok = _recipe(meal="Dinner")
+    dinner_ok.properties["Dinner Category"] = ["Pasta"]
+    assert recipe_has_invalid_dinner_category(dessert_wrong, schema)
+    assert not recipe_has_invalid_dinner_category(dessert_ok, schema)
+    assert not recipe_has_invalid_dinner_category(dinner_ok, schema)
+    assert len(recipes_invalid_dinner_category([dessert_wrong, dessert_ok, dinner_ok], schema)) == 1
+
+
+def test_run_common_metadata_repair_runs_strip_and_backfill() -> None:
+    db = MagicMock()
+    recipes = [_recipe(meal="Dessert")]
+
+    with (
+        patch(
+            "src.grocery_wizard.recipes.recipe_maintenance.run_strip_invalid_dinner_categories",
+            return_value=BackfillSummary(succeeded=1, scanned=1),
+        ) as strip_mock,
+        patch(
+            "src.grocery_wizard.recipes.recipe_maintenance.run_normalize_protein_none_to_na",
+            return_value=BackfillSummary(succeeded=0, scanned=0),
+        ) as protein_mock,
+        patch(
+            "src.grocery_wizard.recipes.recipe_maintenance.run_metadata_backfill",
+            return_value=BackfillSummary(succeeded=2, scanned=3),
+        ) as backfill_mock,
+    ):
+        summary = run_common_metadata_repair(db, recipes)
+
+    assert summary.strip is not None
+    assert summary.strip.succeeded == 1
+    assert summary.protein_none_to_na is not None
+    assert summary.backfill is not None
+    assert summary.backfill.succeeded == 2
+    strip_mock.assert_called_once()
+    protein_mock.assert_called_once()
+    backfill_mock.assert_called_once()
+
+
+def test_run_normalize_protein_none_to_na() -> None:
+    schema = _full_schema()
+    db = MagicMock()
+    db.schema = schema
+    dessert = _recipe(meal="Dessert")
+    dessert.properties["Protein"] = ["None"]
+    summary = run_normalize_protein_none_to_na(db, [dessert])
+    assert summary.succeeded == 1
+    db.update_recipe.assert_called_once_with("page-1", {"Protein": ["N/A"]})
+
+
+def test_dessert_with_na_only_dinner_category_not_invalid() -> None:
+    schema = _full_schema()
+    dessert_ok = _recipe(meal="Dessert")
+    dessert_ok.properties["Dinner Category"] = ["N/A"]
+    assert not recipe_has_invalid_dinner_category(dessert_ok, schema)
+
+
+def test_run_strip_invalid_dinner_categories() -> None:
+    schema = _full_schema()
+    db = MagicMock()
+    db.schema = schema
+    dessert_wrong = _recipe(meal="Dessert")
+    dessert_wrong.properties["Dinner Category"] = ["Pasta"]
+    summary = run_strip_invalid_dinner_categories(db, [dessert_wrong])
+    assert summary.succeeded == 1
+    db.update_recipe.assert_called_once_with("page-1", {"Dinner Category": ["N/A"]})
+
+
+def test_infer_metadata_does_not_overwrite_non_blank_dinner_category() -> None:
+    schema = _full_schema()
+    db = MagicMock()
+    db.schema = schema
+    candidate = _recipe(ingredients="1 lb chicken", meal="Dessert", weeknight=False)
+    candidate.properties["Dinner Category"] = ["N/A"]
+
+    updates = infer_metadata_field_values(db, candidate)
+
+    assert "Dinner Category" not in updates
+    assert "Meal" not in updates
 
 
 def test_run_metadata_backfill_fills_blanks_only() -> None:

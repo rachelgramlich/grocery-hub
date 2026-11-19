@@ -11,12 +11,16 @@ from src.grocery_wizard.integrations.nyt_cooking import (
     NytCollection,
     NYTCookingClient,
     NytCredentials,
+    NytSavedRecipe,
     NytSyncCancelledError,
     _ingredients_from_parts,
     _parse_recipe_payload,
     credentials_status,
+    default_orphan_target_folder,
+    file_orphans_into_folder,
     flag_metadata_issues,
     format_metadata_review,
+    list_orphan_recipes,
     load_credentials,
     parse_regi_id,
     prompt_collection_choice,
@@ -180,6 +184,57 @@ def test_find_collection_by_name_case_insensitive(credentials: NytCredentials) -
     assert found.id == "10"
 
 
+def test_default_orphan_target_folder(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("GROCERY_WIZARD_NYT_ORPHAN_FOLDER", raising=False)
+    assert default_orphan_target_folder() == "1 to make"
+    monkeypatch.setenv("GROCERY_WIZARD_NYT_ORPHAN_FOLDER", "Weeknight")
+    assert default_orphan_target_folder() == "Weeknight"
+
+
+def test_list_orphan_recipes(credentials: NytCredentials) -> None:
+    client = NYTCookingClient(credentials)
+    client.list_collections = MagicMock(  # type: ignore[method-assign]
+        return_value=[NytCollection(id="1", name="A", recipe_count=1)]
+    )
+    client.collection_recipe_ids = MagicMock(return_value=["2"])  # type: ignore[method-assign]
+    client.iter_all_saved_recipes = MagicMock(  # type: ignore[method-assign]
+        return_value=iter(
+            [
+                NytSavedRecipe(id="1", name="One", url="https://example/1"),
+                NytSavedRecipe(id="2", name="Two", url="https://example/2"),
+            ]
+        )
+    )
+    orphans = list_orphan_recipes(client)
+    assert [recipe.id for recipe in orphans] == ["1"]
+
+
+def test_file_orphans_into_folder_dry_run(credentials: NytCredentials) -> None:
+    client = NYTCookingClient(credentials)
+    client.list_collections = MagicMock(return_value=[])  # type: ignore[method-assign]
+    client.iter_all_saved_recipes = MagicMock(  # type: ignore[method-assign]
+        return_value=iter([NytSavedRecipe(id="9", name="Nine", url="")])
+    )
+    summary = file_orphans_into_folder(client, folder_name="1 to make", dry_run=True)
+    assert summary.dry_run is True
+    assert summary.orphans_total == 1
+    assert summary.added == 0
+
+
+def test_save_recipe_and_add_to_collection(credentials: NytCredentials) -> None:
+    session = MagicMock()
+    client = NYTCookingClient(credentials, session=session)
+    session.post.side_effect = [
+        _mock_response(status_code=201, payload={"id": 1019049}),
+        _mock_response(status_code=201, payload={"id": 999}),
+    ]
+
+    save_status, folder_status = client.save_recipe_to_collection("42", "1019049")
+    assert save_status == 201
+    assert folder_status == 201
+    assert session.post.call_count == 2
+
+
 def test_get_recipe(credentials: NytCredentials) -> None:
     session = MagicMock()
     client = NYTCookingClient(credentials, session=session)
@@ -318,11 +373,47 @@ def test_sync_skips_existing_links(credentials: NytCredentials) -> None:
 
     db = MagicMock()
     db.find_by_link.return_value = MagicMock(name="Already There")
+    db.nyt_synced_column_name.return_value = None
 
     with patch("src.grocery_wizard.recipes.add_recipe.add_prefetched_recipes") as add_mock:
         summary = sync_saved_recipes_to_notion(db, client)
 
     assert summary.skipped_existing == 1
+    assert summary.updated_existing == 0
+    add_mock.assert_not_called()
+
+
+def test_sync_tags_existing_when_nyt_checkbox_unset(credentials: NytCredentials) -> None:
+    session = MagicMock()
+    client = NYTCookingClient(credentials, session=session)
+    session.get.return_value = _mock_response(
+        payload={
+            "collectables": [
+                {
+                    "id": "1",
+                    "name": "Existing",
+                    "url": "https://cooking.nytimes.com/recipes/1-existing",
+                }
+            ],
+            "collectables_count": 1,
+        }
+    )
+
+    db = MagicMock()
+    existing = MagicMock(
+        name="Already There",
+        page_id="page-1",
+        properties={"Synced from NYT recipe box": False},
+    )
+    db.find_by_link.return_value = existing
+    db.nyt_synced_column_name.return_value = "Synced from NYT recipe box"
+
+    with patch("src.grocery_wizard.recipes.add_recipe.add_prefetched_recipes") as add_mock:
+        summary = sync_saved_recipes_to_notion(db, client)
+
+    assert summary.skipped_existing == 1
+    assert summary.updated_existing == 1
+    db.update_recipe.assert_called_once_with("page-1", {"Synced from NYT recipe box": True})
     add_mock.assert_not_called()
 
 
@@ -703,15 +794,95 @@ def test_reclassify_updates_meal_and_weeknight() -> None:
     db.update_recipe.assert_any_call("page-2", {"Meal": "Lunch"})
 
 
+def test_reclassify_clears_dinner_category_on_dessert() -> None:
+    from dataclasses import dataclass
+
+    from src.grocery_wizard.integrations.notion import ColumnInfo, DatabaseSchema
+    from src.grocery_wizard.integrations.nyt_cooking import reclassify_nyt_synced_recipes
+
+    @dataclass
+    class StubRecipe:
+        page_id: str
+        name: str
+        link: str | None
+        ingredients: str | None
+        properties: dict
+
+    db = MagicMock()
+    db.nyt_synced_column_name.return_value = "Synced from NYT recipe box"
+    db.schema = DatabaseSchema(
+        name_column="Name",
+        link_column="Link",
+        ingredients_column="Ingredients",
+        filter_columns=[
+            ColumnInfo(name="Meal", type="multi_select", options=["Dessert", "Dinner"]),
+            ColumnInfo(
+                name="Dinner Category",
+                type="multi_select",
+                options=["N/A", "One-Pot / One-Pan"],
+            ),
+        ],
+        checkbox_columns=[],
+        all_columns={
+            "Name": ColumnInfo(name="Name", type="title"),
+            "Link": ColumnInfo(name="Link", type="url"),
+            "Meal": ColumnInfo(name="Meal", type="multi_select"),
+            "Dinner Category": ColumnInfo(
+                name="Dinner Category",
+                type="multi_select",
+                options=["N/A", "One-Pot / One-Pan"],
+            ),
+        },
+    )
+    db.query_recipes.return_value = [
+        StubRecipe(
+            page_id="page-brownie",
+            name="Skillet Brownie",
+            link="https://cooking.nytimes.com/recipes/1-skillet-brownie",
+            ingredients="chocolate\nbutter",
+            properties={
+                "Synced from NYT recipe box": True,
+                "Meal": ["Dessert"],
+                "Dinner Category": ["One-Pot / One-Pan"],
+            },
+        ),
+    ]
+
+    client = MagicMock()
+    client.get_recipe.return_value = MagicMock(total_time_minutes=None)
+
+    summary = reclassify_nyt_synced_recipes(db, client, dry_run=False)
+
+    assert summary.dinner_category_cleared == 1
+    db.update_recipe.assert_called_once_with("page-brownie", {"Dinner Category": ["N/A"]})
+
+
 def test_format_sync_summary_includes_counts() -> None:
     from src.grocery_wizard.integrations.nyt_cooking import NytSyncSummary, format_sync_summary
 
     text = format_sync_summary(
-        NytSyncSummary(total=10, skipped_existing=3, created=2, dry_run=0, failed=1)
+        NytSyncSummary(
+            total=10, skipped_existing=3, updated_existing=1, created=2, dry_run=0, failed=1
+        )
     )
-    assert "10 in NYT" in text
-    assert "3 already in Notion" in text
-    assert "2 created" in text
+    assert "10 in NYT folder" in text
+    assert "3 matched existing" in text
+    assert "2 new page" in text
+    assert "1 existing page(s) tagged" in text
+
+
+def test_format_notion_sync_outcome_no_writes_when_all_skipped() -> None:
+    from src.grocery_wizard.integrations.nyt_cooking import (
+        NytSyncSummary,
+        format_notion_sync_outcome_message,
+    )
+
+    kind, message = format_notion_sync_outcome_message(
+        NytSyncSummary(total=190, skipped_existing=190)
+    )
+    assert kind == "info"
+    assert "No Notion changes" in message
+    assert "Notion updated" not in message
 
 
 def test_add_prefetched_recipes_cleans_ingredients_like_the_add_recipe_flow() -> None:
