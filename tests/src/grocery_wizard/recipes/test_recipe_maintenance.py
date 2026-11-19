@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 from src.grocery_wizard.integrations.notion import ColumnInfo, DatabaseSchema, Recipe
 from src.grocery_wizard.recipes.recipe_maintenance import (
+    BackfillSummary,
     _resolve_total_minutes,
     infer_metadata_field_values,
     is_blank_metadata_value,
@@ -19,6 +20,7 @@ from src.grocery_wizard.recipes.recipe_maintenance import (
     recipes_invalid_dinner_category,
     recipes_missing_ingredients,
     recipes_missing_metadata,
+    run_common_metadata_repair,
     run_image_backfill,
     run_ingredients_backfill,
     run_metadata_backfill,
@@ -222,6 +224,30 @@ def test_recipe_has_invalid_dinner_category() -> None:
     assert recipe_has_invalid_dinner_category(dessert_wrong, schema)
     assert not recipe_has_invalid_dinner_category(dinner_ok, schema)
     assert len(recipes_invalid_dinner_category([dessert_wrong, dinner_ok], schema)) == 1
+
+
+def test_run_common_metadata_repair_runs_strip_and_backfill() -> None:
+    db = MagicMock()
+    recipes = [_recipe(meal="Dessert")]
+
+    with (
+        patch(
+            "src.grocery_wizard.recipes.recipe_maintenance.run_strip_invalid_dinner_categories",
+            return_value=BackfillSummary(succeeded=1, scanned=1),
+        ) as strip_mock,
+        patch(
+            "src.grocery_wizard.recipes.recipe_maintenance.run_metadata_backfill",
+            return_value=BackfillSummary(succeeded=2, scanned=3),
+        ) as backfill_mock,
+    ):
+        summary = run_common_metadata_repair(db, recipes)
+
+    assert summary.strip is not None
+    assert summary.strip.succeeded == 1
+    assert summary.backfill is not None
+    assert summary.backfill.succeeded == 2
+    strip_mock.assert_called_once()
+    backfill_mock.assert_called_once()
 
 
 def test_run_strip_invalid_dinner_categories() -> None:

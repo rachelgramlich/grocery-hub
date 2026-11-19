@@ -11,7 +11,12 @@ from src.grocery_wizard.integrations.notion_views import (
     ensure_manual_ingredients_notion_view_url,
     ensure_possibly_missing_checkboxes_notion_view_url,
 )
-from src.grocery_wizard.integrations.nyt_cooking import NYTCookingClient, credentials_status
+from src.grocery_wizard.integrations.nyt_cooking import (
+    NYTCookingClient,
+    credentials_status,
+    format_reclassify_summary,
+    reclassify_nyt_synced_recipes,
+)
 from src.grocery_wizard.recipes.recipe_maintenance import (
     BackfillSummary,
     FractionCallback,
@@ -23,6 +28,7 @@ from src.grocery_wizard.recipes.recipe_maintenance import (
     recipes_missing_ingredients,
     recipes_missing_metadata,
     recipes_possibly_missing_all_checkboxes,
+    run_common_metadata_repair,
     run_image_backfill,
     run_ingredients_backfill,
     run_metadata_backfill,
@@ -134,6 +140,161 @@ def render_recipe_maintenance() -> None:
 
     _render_meal_plan_status_section(db, recipes)
 
+    st.markdown("### Fix mistaken metadata")
+    st.caption(
+        "These actions **overwrite** specific bad values (unlike metadata backfill, which only "
+        "fills empty cells). Run after classifier improvements or bulk NYT imports."
+    )
+
+    nyt_client = _nyt_client_if_configured()
+    nyt_synced_count = 0
+    nyt_col = db.nyt_synced_column_name()
+    if nyt_col:
+        nyt_synced_count = sum(1 for r in recipes if r.properties.get(nyt_col))
+
+    repair_disabled = not invalid_dinner_category and not missing_metadata
+
+    with st.container(border=True):
+        st.markdown("**Standard metadata repair**")
+        st.caption(
+            "1) Strip invalid **Dinner/Lunch Category** on dessert/drink/breakfast, "
+            "then 2) backfill any still-empty metadata (including category for lunch/dinner)."
+        )
+        st.write(
+            f"**{len(invalid_dinner_category)}** to strip · "
+            f"**{len(missing_metadata)}** with empty fields to fill"
+        )
+        if st.button(
+            "Run standard repair (strip + backfill)",
+            type="primary",
+            key="recipe_maint_standard_repair",
+            disabled=repair_disabled,
+        ):
+
+            def _repair_runner(
+                *,
+                on_progress: ProgressCallback | None = None,
+                on_fraction: FractionCallback | None = None,
+            ) -> BackfillSummary:
+                combined = run_common_metadata_repair(
+                    db,
+                    recipes,
+                    nyt_client=nyt_client,
+                    on_progress=on_progress,
+                    on_fraction=on_fraction,
+                )
+                return BackfillSummary(
+                    scanned=(
+                        (combined.strip.scanned if combined.strip else 0)
+                        + (combined.backfill.scanned if combined.backfill else 0)
+                    ),
+                    succeeded=(
+                        (combined.strip.succeeded if combined.strip else 0)
+                        + (combined.backfill.succeeded if combined.backfill else 0)
+                    ),
+                    failed=(
+                        (combined.strip.failed if combined.strip else 0)
+                        + (combined.backfill.failed if combined.backfill else 0)
+                    ),
+                    skipped=(
+                        (combined.strip.skipped if combined.strip else 0)
+                        + (combined.backfill.skipped if combined.backfill else 0)
+                    ),
+                )
+
+            _run_backfill_with_progress(
+                label="Standard metadata repair",
+                runner=_repair_runner,
+            )
+
+    with st.container(border=True):
+        st.markdown("**Strip Dinner/Lunch Category on desserts / drinks / breakfast**")
+        st.caption(
+            "Clears Dinner/Lunch Category when Meal is Dessert, Drink, or Breakfast "
+            "(fixes mistaken N/A or One-Pot / One-Pan on brownies and similar)."
+        )
+        st.write(
+            f"**{len(invalid_dinner_category)}** recipe(s) with a dinner/lunch category to clear."
+        )
+        if st.button(
+            "Strip invalid dinner categories",
+            type="secondary",
+            key="recipe_maint_strip_dinner_category",
+            disabled=not invalid_dinner_category,
+        ):
+
+            def _strip_runner(
+                *,
+                on_progress: ProgressCallback | None = None,
+                on_fraction: FractionCallback | None = None,
+            ) -> BackfillSummary:
+                return run_strip_invalid_dinner_categories(
+                    db,
+                    invalid_dinner_category,
+                    on_progress=on_progress,
+                    on_fraction=on_fraction,
+                )
+
+            _run_backfill_with_progress(
+                label="Strip invalid dinner categories",
+                runner=_strip_runner,
+            )
+
+    if nyt_client is not None and nyt_col:
+        with st.container(border=True):
+            st.markdown("**Reclassify NYT-synced recipes**")
+            st.caption(
+                "Re-runs Meal, Weeknight Friendly, and dinner/lunch category rules on rows marked "
+                "synced from NYT (overwrites when the classifier disagrees; clears bad categories)."
+            )
+            st.write(f"**{nyt_synced_count}** NYT-synced recipe(s) in Notion.")
+            reclassify_dry = st.checkbox(
+                "Dry run (log changes only)",
+                key="recipe_maint_nyt_reclassify_dry",
+            )
+            if st.button(
+                "Reclassify NYT-synced metadata",
+                type="secondary",
+                key="recipe_maint_nyt_reclassify",
+                disabled=nyt_synced_count == 0,
+            ):
+                progress_lines: list[str] = []
+                progress_bar = st.progress(0.0, text="NYT reclassify…")
+
+                def on_progress(message: str) -> None:
+                    progress_lines.append(message)
+
+                with st.status("NYT reclassify", expanded=True) as status:
+                    summary = reclassify_nyt_synced_recipes(
+                        db,
+                        nyt_client,
+                        dry_run=reclassify_dry,
+                        on_progress=on_progress,
+                    )
+                    for line in progress_lines[-40:]:
+                        st.write(line)
+                    if summary.changes:
+                        for change in summary.changes[:30]:
+                            st.write(
+                                f"{change.name}: {change.field} "
+                                f"{change.old_value} → {change.new_value}"
+                            )
+                    outcome = format_reclassify_summary(summary)
+                    status.update(label=outcome, state="complete")
+                progress_bar.progress(1.0, text=outcome)
+                st.success(outcome)
+                if not reclassify_dry and (
+                    summary.meal_changes
+                    or summary.dinner_category_cleared
+                    or summary.weeknight_set
+                    or summary.weeknight_cleared
+                ):
+                    invalidate_recipes_after_write(schema_may_change=True)
+    elif not credentials_status()["configured"]:
+        with st.container(border=True):
+            st.markdown("**Reclassify NYT-synced recipes**")
+            st.caption("Set NYT credentials in `.env` to re-run classification on synced rows.")
+
     st.markdown("### Automatic backfill")
 
     with st.container(border=True):
@@ -172,8 +333,8 @@ def render_recipe_maintenance() -> None:
         st.caption(
             "Fills **empty** Meal, Cuisine, Protein, and **Dinner/Lunch Category** for **Dinner** "
             "and **Lunch** (one column). It does **not** overwrite values "
-            "already set (for example Dessert + Dinner/Lunch Category N/A stays wrong until you "
-            "strip below). **Weeknight Friendly** applies only when Meal includes Dinner. "
+            "already set — use **Fix mistaken metadata** above for rule-based overwrites. "
+            "**Weeknight Friendly** applies only when Meal includes Dinner. "
             "Instructions, NYT sync, and Showstopper are not auto-filled."
         )
         st.write(f"**{len(missing_metadata)}** recipe(s) with gaps in metadata columns.")
@@ -199,39 +360,6 @@ def render_recipe_maintenance() -> None:
                 )
 
             _run_backfill_with_progress(label="Metadata backfill", runner=_metadata_runner)
-
-    with st.container(border=True):
-        st.markdown("**Strip Dinner/Lunch Category on desserts / drinks / breakfast**")
-        st.caption(
-            "Clears Dinner/Lunch Category when Meal is Dessert, Drink, or Breakfast "
-            "(fixes mistaken N/A or One-Pot / One-Pan on brownies and similar)."
-        )
-        st.write(
-            f"**{len(invalid_dinner_category)}** recipe(s) with a dinner/lunch category to clear."
-        )
-        if st.button(
-            "Strip invalid dinner categories",
-            type="secondary",
-            key="recipe_maint_strip_dinner_category",
-            disabled=not invalid_dinner_category,
-        ):
-
-            def _strip_runner(
-                *,
-                on_progress: ProgressCallback | None = None,
-                on_fraction: FractionCallback | None = None,
-            ) -> BackfillSummary:
-                return run_strip_invalid_dinner_categories(
-                    db,
-                    invalid_dinner_category,
-                    on_progress=on_progress,
-                    on_fraction=on_fraction,
-                )
-
-            _run_backfill_with_progress(
-                label="Strip invalid dinner categories",
-                runner=_strip_runner,
-            )
 
     with st.container(border=True):
         st.markdown("**Backfill missing cover images**")

@@ -20,8 +20,10 @@ from src.grocery_wizard.integrations.nyt_cooking import (  # noqa: E402
 )
 from src.grocery_wizard.recipes.recipe_maintenance import (  # noqa: E402
     format_backfill_summary,
+    format_common_metadata_repair_summary,
     recipes_invalid_dinner_category,
     recipes_missing_metadata,
+    run_common_metadata_repair,
     run_metadata_backfill,
     run_strip_invalid_dinner_categories,
 )
@@ -29,6 +31,11 @@ from src.grocery_wizard.recipes.recipe_maintenance import (  # noqa: E402
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--repair",
+        action="store_true",
+        help="Strip invalid categories then backfill empty metadata (default if no flags)",
+    )
     parser.add_argument(
         "--strip",
         action="store_true",
@@ -42,8 +49,8 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true", help="Report counts only; no writes")
     args = parser.parse_args()
 
-    if not args.strip and not args.backfill:
-        parser.error("Pass --strip and/or --backfill")
+    if not args.strip and not args.backfill and not args.repair:
+        args.repair = True
 
     config = load_config()
     db = NotionRecipesDB(config)
@@ -53,6 +60,16 @@ def main() -> None:
     if args.backfill and load_credentials() is not None:
         nyt_client = NYTCookingClient()
         print(f"NYT credentials: {credentials_status()}")
+
+    if args.repair and not args.strip and not args.backfill:
+        invalid = recipes_invalid_dinner_category(recipes, db.schema)
+        missing = recipes_missing_metadata(recipes, db.schema)
+        print(f"Repair: {len(invalid)} strip, {len(missing)} backfill candidates")
+        if args.dry_run:
+            return
+        summary = run_common_metadata_repair(db, recipes, nyt_client=nyt_client)
+        print(format_common_metadata_repair_summary(summary))
+        return
 
     if args.strip:
         invalid = recipes_invalid_dinner_category(recipes, db.schema)

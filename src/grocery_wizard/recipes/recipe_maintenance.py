@@ -48,6 +48,14 @@ class BackfillSummary:
     messages: list[str] = field(default_factory=list)
 
 
+@dataclass(slots=True)
+class CommonMetadataRepairSummary:
+    """Result of strip + metadata backfill (rule-based repair, not blind overwrite)."""
+
+    strip: BackfillSummary | None = None
+    backfill: BackfillSummary | None = None
+
+
 def recipe_has_link(recipe: Recipe) -> bool:
     return bool((recipe.link or "").strip())
 
@@ -372,6 +380,69 @@ def format_backfill_summary(label: str, summary: BackfillSummary) -> str:
         f"{summary.failed} failed, {summary.skipped} skipped "
         f"(of {summary.scanned} scanned)"
     )
+
+
+def format_common_metadata_repair_summary(summary: CommonMetadataRepairSummary) -> str:
+    parts: list[str] = []
+    if summary.strip is not None:
+        parts.append(format_backfill_summary("Strip invalid categories", summary.strip))
+    if summary.backfill is not None:
+        parts.append(format_backfill_summary("Metadata backfill", summary.backfill))
+    return " · ".join(parts) if parts else "No repair steps ran"
+
+
+def run_common_metadata_repair(
+    db: NotionRecipesDB,
+    recipes: list[Recipe],
+    *,
+    nyt_client: Any | None = None,
+    do_strip: bool = True,
+    do_backfill: bool = True,
+    on_progress: ProgressCallback | None = None,
+    on_fraction: FractionCallback | None = None,
+) -> CommonMetadataRepairSummary:
+    """Strip rule-invalid dinner/lunch tags, then backfill empty meal-aware metadata."""
+    result = CommonMetadataRepairSummary()
+    steps = [do_strip, do_backfill]
+    step_index = 0
+
+    def _step_fraction(inner: float, *, active: bool) -> None:
+        if not on_fraction or not any(steps):
+            return
+        total_steps = sum(1 for flag in steps if flag)
+        base = step_index / total_steps
+        on_fraction(base + (inner / total_steps if active else 0.0))
+
+    if do_strip:
+        invalid = recipes_invalid_dinner_category(recipes, db.schema)
+        if on_progress:
+            on_progress(f"Strip: {len(invalid)} recipe(s) with invalid dinner/lunch category")
+        result.strip = run_strip_invalid_dinner_categories(
+            db,
+            invalid,
+            on_progress=on_progress,
+            on_fraction=lambda f: _step_fraction(f, active=True),
+        )
+        step_index += 1
+        _step_fraction(1.0, active=False)
+
+    if do_backfill:
+        missing = recipes_missing_metadata(recipes, db.schema)
+        if on_progress:
+            on_progress(f"Backfill: {len(missing)} recipe(s) with empty metadata")
+        result.backfill = run_metadata_backfill(
+            db,
+            missing,
+            nyt_client=nyt_client,
+            on_progress=on_progress,
+            on_fraction=lambda f: _step_fraction(f, active=True),
+        )
+        step_index += 1
+        _step_fraction(1.0, active=False)
+
+    if on_fraction:
+        on_fraction(1.0)
+    return result
 
 
 def run_ingredients_backfill(
