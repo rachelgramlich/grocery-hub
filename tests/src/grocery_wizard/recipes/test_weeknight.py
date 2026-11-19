@@ -44,6 +44,14 @@ def test_weeknight_uses_prep_plus_cook_when_total_includes_marinating() -> None:
     )
 
 
+def test_weeknight_true_at_exactly_sixty_minutes() -> None:
+    assert is_weeknight_friendly(
+        "One-Hour Roast Chicken",
+        meal="Dinner",
+        total_minutes=60,
+    )
+
+
 def test_weeknight_uses_cook_when_prep_includes_long_passive_marinating() -> None:
     """NYT prep often counts marinating; cook alone reflects stove time."""
     assert weeknight_timing_minutes(total_minutes=90, prep_minutes=50, cook_minutes=25) == 25

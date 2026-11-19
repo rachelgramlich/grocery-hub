@@ -99,6 +99,77 @@ def test_parse_minutes_from_display_when_minutes_key_missing() -> None:
 
     assert _parse_minutes({"display": "20 minutes"}) == 20.0
     assert _parse_minutes({"label": "25 min"}) == 25.0
+    assert _parse_minutes({"display": "1 hour"}) == 60.0
+    assert _parse_minutes({"display": "About 1 hour"}) == 60.0
+    assert _parse_minutes({"display": "1 hour 30 minutes"}) == 90.0
+
+
+def test_reclassify_does_not_clear_weeknight_without_prep_and_cook() -> None:
+    from dataclasses import dataclass
+
+    from src.grocery_wizard.integrations.notion import ColumnInfo, DatabaseSchema
+    from src.grocery_wizard.integrations.nyt_cooking import (
+        NytRecipe,
+        reclassify_nyt_synced_recipes,
+    )
+
+    @dataclass
+    class StubRecipe:
+        page_id: str
+        name: str
+        link: str
+        ingredients: str | None
+        properties: dict
+
+    db = MagicMock()
+    db.nyt_synced_column_name.return_value = "Synced from NYT recipe box"
+    db.schema = DatabaseSchema(
+        name_column="Name",
+        link_column="Link",
+        ingredients_column="Ingredients",
+        filter_columns=[ColumnInfo(name="Meal", type="multi_select", options=["Dinner"])],
+        checkbox_columns=[ColumnInfo(name="Dinner: Weeknight Friendly", type="checkbox")],
+        all_columns={
+            "Meal": ColumnInfo(name="Meal", type="multi_select", options=["Dinner"]),
+            "Dinner: Weeknight Friendly": ColumnInfo(
+                name="Dinner: Weeknight Friendly",
+                type="checkbox",
+            ),
+            "Synced from NYT recipe box": ColumnInfo(
+                name="Synced from NYT recipe box",
+                type="checkbox",
+            ),
+        },
+    )
+    db.query_recipes.return_value = [
+        StubRecipe(
+            page_id="page-x",
+            name="Bulgogi-Style Tofu",
+            link="https://cooking.nytimes.com/recipes/1-bulgogi",
+            ingredients=None,
+            properties={
+                "Synced from NYT recipe box": True,
+                "Meal": ["Dinner"],
+                "Dinner: Weeknight Friendly": True,
+            },
+        ),
+    ]
+
+    client = MagicMock()
+    client.get_recipe.return_value = NytRecipe(
+        id="1",
+        name="Bulgogi-Style Tofu",
+        url="https://cooking.nytimes.com/recipes/1-bulgogi",
+        ingredients=[],
+        total_time_minutes=75,
+        prep_time_minutes=None,
+        cook_time_minutes=None,
+    )
+
+    summary = reclassify_nyt_synced_recipes(db, client, dry_run=True)
+
+    assert summary.weeknight_cleared == 0
+    assert summary.unchanged == 1
 
 
 def test_parse_recipe_payload() -> None:

@@ -1356,7 +1356,9 @@ def _build_reclassify_field_updates(
             cook_minutes=cook_minutes,
         )
         old_weeknight = bool(recipe.properties.get(weeknight_column))
-        if new_weeknight != old_weeknight:
+        if old_weeknight and not new_weeknight and prep_minutes is None and cook_minutes is None:
+            pass
+        elif new_weeknight != old_weeknight:
             fields[weeknight_column] = new_weeknight
             if new_weeknight:
                 summary.weeknight_set += 1
@@ -1691,7 +1693,28 @@ def _ingredients_from_parts(parts: Any) -> list[str]:
     return lines
 
 
-_MINUTES_IN_DISPLAY = re.compile(r"(\d+(?:\.\d+)?)\s*(?:min(?:ute)?s?)?\b", re.IGNORECASE)
+_HOURS_IN_DISPLAY = re.compile(r"(\d+(?:\.\d+)?)\s*(?:hours?|hrs?)\b", re.IGNORECASE)
+_MINUTES_IN_DISPLAY = re.compile(r"(\d+(?:\.\d+)?)\s*(?:min(?:ute)?s?)\b", re.IGNORECASE)
+
+
+def _minutes_from_display_text(display: str) -> float | None:
+    text = display.strip()
+    if not text:
+        return None
+    total = 0.0
+    found = False
+    for match in _HOURS_IN_DISPLAY.finditer(text):
+        total += float(match.group(1)) * 60
+        found = True
+    for match in _MINUTES_IN_DISPLAY.finditer(text):
+        total += float(match.group(1))
+        found = True
+    if found:
+        return total
+    bare = re.match(r"^(\d+(?:\.\d+)?)\s*$", text)
+    if bare:
+        return float(bare.group(1))
+    return None
 
 
 def _parse_minutes(value: Any) -> float | None:
@@ -1708,12 +1731,9 @@ def _parse_minutes(value: Any) -> float | None:
     for key in ("display", "label", "text"):
         display = value.get(key)
         if isinstance(display, str):
-            match = _MINUTES_IN_DISPLAY.search(display)
-            if match:
-                try:
-                    return float(match.group(1))
-                except ValueError:
-                    continue
+            parsed = _minutes_from_display_text(display)
+            if parsed is not None:
+                return parsed
     return None
 
 

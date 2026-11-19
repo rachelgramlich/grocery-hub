@@ -39,13 +39,13 @@ def weeknight_timing_minutes(
     includes long passive steps (e.g. bulgogi marinating) but *cook* is short,
     trust cook time under the cap.
     """
-    if total_minutes is not None and total_minutes < WEEKNIGHT_MAX_MINUTES:
+    if total_minutes is not None and total_minutes <= WEEKNIGHT_MAX_MINUTES:
         return total_minutes
     if prep_minutes is not None and cook_minutes is not None:
         active = prep_minutes + cook_minutes
-        if active < WEEKNIGHT_MAX_MINUTES:
+        if active <= WEEKNIGHT_MAX_MINUTES:
             return active
-    if cook_minutes is not None and cook_minutes < WEEKNIGHT_MAX_MINUTES:
+    if cook_minutes is not None and cook_minutes <= WEEKNIGHT_MAX_MINUTES:
         return cook_minutes
     return total_minutes
 
@@ -80,7 +80,7 @@ def is_weeknight_friendly(
         prep_minutes=prep_minutes,
         cook_minutes=cook_minutes,
     )
-    if timing_minutes is not None and timing_minutes < WEEKNIGHT_MAX_MINUTES:
+    if timing_minutes is not None and timing_minutes <= WEEKNIGHT_MAX_MINUTES:
         return True
 
     return bool(WEEKNIGHT_TITLE_PATTERN.search(title))
