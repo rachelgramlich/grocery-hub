@@ -23,6 +23,7 @@ def test_recipe_maintenance_page_registered() -> None:
     assert "Open Notion with this filter" not in source
     assert "Start metadata backfill" in source
     assert "Start cover image backfill" in source
+    assert "_write_backfill_progress_line" in source
     assert "### Meal plan status" in source
     assert "_render_meal_plan_status_section" in source
     assert "Apply meal plan status" in source

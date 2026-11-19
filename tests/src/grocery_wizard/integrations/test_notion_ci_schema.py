@@ -30,11 +30,27 @@ def _recipe_schema(*, ingredients: str | None = "Ingredients") -> DatabaseSchema
     }
     if ingredients:
         columns[ingredients] = ColumnInfo(name=ingredients, type="rich_text")
+    dinner = ColumnInfo(
+        name="Dinner/Lunch Category",
+        type="multi_select",
+        options=["N/A", "Pasta"],
+    )
+    cuisine = ColumnInfo(name="Cuisine", type="multi_select", options=["American", "N/A"])
+    tags = ColumnInfo(name="Tags", type="multi_select", options=["N/A"])
+    protein = ColumnInfo(name="Protein", type="multi_select", options=["None", "N/A"])
+    columns.update(
+        {
+            "Dinner/Lunch Category": dinner,
+            "Cuisine": cuisine,
+            "Tags": tags,
+            "Protein": protein,
+        }
+    )
     return DatabaseSchema(
         name_column="Name",
         link_column="Link",
         ingredients_column=ingredients,
-        filter_columns=[],
+        filter_columns=[dinner, cuisine, tags, protein],
         checkbox_columns=[],
         all_columns=columns,
     )

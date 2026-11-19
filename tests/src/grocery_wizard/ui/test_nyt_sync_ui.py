@@ -39,9 +39,10 @@ def test_list_recipe_box_folders_omits_all_saved_recipes_option() -> None:
     nyt_cooking = (APP_PATH.parent.parent / "integrations" / "nyt_cooking.py").read_text(
         encoding="utf-8"
     )
-    assert "All saved recipes" not in nyt_sync
+    assert 'label="All saved recipes"' not in nyt_sync
+    assert "All saved recipes" not in nyt_cooking
     assert '_PREFERRED_NYT_FOLDER_LABELS = ("To make", "Favorites")' in nyt_cooking
-    assert 'label="All saved recipes"' not in nyt_cooking
+    assert "Recipe box organization" in nyt_sync
 
 
 def test_nyt_sync_shows_progress_bar_during_run() -> None:
@@ -52,10 +53,17 @@ def test_nyt_sync_shows_progress_bar_during_run() -> None:
     assert "Sync log" in nyt_sync
 
 
+def test_nyt_orphan_filing_controls_present() -> None:
+    nyt_sync = (APP_PATH.parent / "nyt_sync.py").read_text(encoding="utf-8")
+    assert 'key="nyt_orphan_preview"' in nyt_sync
+    assert 'key="nyt_orphan_file"' in nyt_sync
+    assert "default_orphan_target_folder" in nyt_sync
+
+
 def test_nyt_dry_run_defaults_off_and_clarifies_notion_outcome() -> None:
     nyt_sync = (APP_PATH.parent / "nyt_sync.py").read_text(encoding="utf-8")
     assert 'key="nyt_sync_dry_run"' in nyt_sync
     assert "value=False" in nyt_sync
     assert "Dry run finished — Notion was not updated." in nyt_sync
-    assert "Notion updated — added" in nyt_sync
-    assert "Notion updated — no new recipes were needed" in nyt_sync
+    assert "format_notion_sync_outcome_message" in nyt_sync
+    assert "summary.notion_writes" in nyt_sync
