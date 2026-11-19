@@ -857,6 +857,84 @@ def test_reclassify_clears_dinner_category_on_dessert() -> None:
     db.update_recipe.assert_called_once_with("page-brownie", {"Dinner Category": ["N/A"]})
 
 
+def test_reclassify_sets_weeknight_when_meal_is_multi_select_dinner() -> None:
+    from dataclasses import dataclass
+
+    from src.grocery_wizard.integrations.notion import ColumnInfo, DatabaseSchema
+    from src.grocery_wizard.integrations.nyt_cooking import (
+        NytRecipe,
+        reclassify_nyt_synced_recipes,
+    )
+
+    @dataclass
+    class StubRecipe:
+        page_id: str
+        name: str
+        link: str
+        ingredients: str | None
+        properties: dict
+
+    db = MagicMock()
+    db.nyt_synced_column_name.return_value = "Synced from NYT recipe box"
+    db.schema = DatabaseSchema(
+        name_column="Name",
+        link_column="Link",
+        ingredients_column="Ingredients",
+        filter_columns=[
+            ColumnInfo(
+                name="Meal",
+                type="multi_select",
+                options=["Dinner", "Lunch", "Snack/Side"],
+            ),
+        ],
+        checkbox_columns=[
+            ColumnInfo(name="Dinner: Weeknight Friendly", type="checkbox"),
+        ],
+        all_columns={
+            "Meal": ColumnInfo(name="Meal", type="multi_select", options=["Dinner"]),
+            "Dinner: Weeknight Friendly": ColumnInfo(
+                name="Dinner: Weeknight Friendly",
+                type="checkbox",
+            ),
+            "Synced from NYT recipe box": ColumnInfo(
+                name="Synced from NYT recipe box",
+                type="checkbox",
+            ),
+        },
+    )
+    db.query_recipes.return_value = [
+        StubRecipe(
+            page_id="page-3",
+            name="Sheet-Pan Lemony Chicken",
+            link="https://cooking.nytimes.com/recipes/103-sheet-pan",
+            ingredients=None,
+            properties={
+                "Synced from NYT recipe box": True,
+                "Meal": ["Dinner"],
+                "Dinner: Weeknight Friendly": False,
+            },
+        ),
+    ]
+
+    client = MagicMock()
+    client.get_recipe.return_value = NytRecipe(
+        id="103",
+        name="Sheet-Pan Lemony Chicken",
+        url="https://cooking.nytimes.com/recipes/103-sheet-pan",
+        ingredients=[],
+        total_time_minutes=75,
+    )
+
+    summary = reclassify_nyt_synced_recipes(db, client, dry_run=False)
+
+    assert summary.total == 1
+    assert summary.weeknight_set == 1
+    db.update_recipe.assert_called_once_with(
+        "page-3",
+        {"Dinner: Weeknight Friendly": True},
+    )
+
+
 def test_format_sync_summary_includes_counts() -> None:
     from src.grocery_wizard.integrations.nyt_cooking import NytSyncSummary, format_sync_summary
 

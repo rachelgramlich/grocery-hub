@@ -278,7 +278,7 @@ def classify_recipe(
     if weeknight_column:
         results[weeknight_column] = is_weeknight_friendly(
             title,
-            meal=meal if isinstance(meal, str) else None,
+            meal=meal,
             total_minutes=total_minutes,
         )
 

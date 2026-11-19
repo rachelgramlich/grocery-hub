@@ -41,6 +41,16 @@ def test_weeknight_false_when_meal_unset() -> None:
     assert not is_weeknight_friendly("Quick Pasta", meal=None, total_minutes=30)
 
 
+def test_weeknight_true_when_dinner_in_multi_select() -> None:
+    assert is_weeknight_friendly(
+        "Sheet Pan Chicken",
+        meal=["Dinner", "Lunch"],
+        total_minutes=45,
+    )
+    assert is_weeknight_friendly("One-Pot Pasta", meal=["Dinner"])
+    assert not is_weeknight_friendly("Quick Cake", meal=["Dessert", "Snack/Side"], total_minutes=30)
+
+
 def test_classify_recipe_sets_weeknight_checkbox_for_dinner() -> None:
     result = classify_recipe(
         "Quick Sheet Pan Salmon",
@@ -72,4 +82,15 @@ def test_classify_recipe_uses_total_minutes_for_weeknight() -> None:
         weeknight_column=DEFAULT_WEEKNIGHT_COLUMN,
     )
     assert result["Meal"] == "Dinner"
+    assert result[DEFAULT_WEEKNIGHT_COLUMN] is True
+
+
+def test_classify_recipe_sets_weeknight_for_multi_select_meal_column() -> None:
+    result = classify_recipe(
+        "Quick Sheet Pan Salmon",
+        ["salmon", "lemon"],
+        [("Meal", "multi_select", MEAL_OPTIONS)],
+        weeknight_column=DEFAULT_WEEKNIGHT_COLUMN,
+    )
+    assert result["Meal"] == ["Dinner"]
     assert result[DEFAULT_WEEKNIGHT_COLUMN] is True

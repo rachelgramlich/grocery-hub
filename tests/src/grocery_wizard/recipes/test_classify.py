@@ -32,6 +32,10 @@ def test_meal_classifies_dinner_from_pasta_title() -> None:
     assert result == "Dinner"
 
 
+def test_meal_pasta_primavera_is_dinner_not_snack_side() -> None:
+    assert classify_column("Meal", "Pasta Primavera", [], allowed_options=MEAL_OPTIONS) == "Dinner"
+
+
 def test_meal_classifies_breakfast_from_title() -> None:
     result = classify_column(
         "Meal",
