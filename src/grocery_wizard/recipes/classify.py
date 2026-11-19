@@ -254,7 +254,12 @@ def classify_recipe(
         if meal is not None:
             results["Meal"] = [meal] if isinstance(meal, str) else meal
 
-    meal_value = meal if isinstance(meal, str) else (meal[0] if isinstance(meal, list) and meal else None)
+    if isinstance(meal, str):
+        meal_value = meal
+    elif isinstance(meal, list) and meal:
+        meal_value = meal[0]
+    else:
+        meal_value = None
     if meal_value in _MEALS_WITHOUT_DINNER_CATEGORY:
         results.pop("Dinner Category", None)
 
