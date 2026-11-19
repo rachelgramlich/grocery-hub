@@ -11,12 +11,16 @@ from src.grocery_wizard.integrations.nyt_cooking import (
     NytCollection,
     NYTCookingClient,
     NytCredentials,
+    NytSavedRecipe,
     NytSyncCancelledError,
     _ingredients_from_parts,
     _parse_recipe_payload,
     credentials_status,
+    default_orphan_target_folder,
+    file_orphans_into_folder,
     flag_metadata_issues,
     format_metadata_review,
+    list_orphan_recipes,
     load_credentials,
     parse_regi_id,
     prompt_collection_choice,
@@ -178,6 +182,43 @@ def test_find_collection_by_name_case_insensitive(credentials: NytCredentials) -
     found = client.find_collection_by_name("weeknight")
     assert found is not None
     assert found.id == "10"
+
+
+def test_default_orphan_target_folder(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("GROCERY_WIZARD_NYT_ORPHAN_FOLDER", raising=False)
+    assert default_orphan_target_folder() == "1 to make"
+    monkeypatch.setenv("GROCERY_WIZARD_NYT_ORPHAN_FOLDER", "Weeknight")
+    assert default_orphan_target_folder() == "Weeknight"
+
+
+def test_list_orphan_recipes(credentials: NytCredentials) -> None:
+    client = NYTCookingClient(credentials)
+    client.list_collections = MagicMock(  # type: ignore[method-assign]
+        return_value=[NytCollection(id="1", name="A", recipe_count=1)]
+    )
+    client.collection_recipe_ids = MagicMock(return_value=["2"])  # type: ignore[method-assign]
+    client.iter_all_saved_recipes = MagicMock(  # type: ignore[method-assign]
+        return_value=iter(
+            [
+                NytSavedRecipe(id="1", name="One", url="https://example/1"),
+                NytSavedRecipe(id="2", name="Two", url="https://example/2"),
+            ]
+        )
+    )
+    orphans = list_orphan_recipes(client)
+    assert [recipe.id for recipe in orphans] == ["1"]
+
+
+def test_file_orphans_into_folder_dry_run(credentials: NytCredentials) -> None:
+    client = NYTCookingClient(credentials)
+    client.list_collections = MagicMock(return_value=[])  # type: ignore[method-assign]
+    client.iter_all_saved_recipes = MagicMock(  # type: ignore[method-assign]
+        return_value=iter([NytSavedRecipe(id="9", name="Nine", url="")])
+    )
+    summary = file_orphans_into_folder(client, folder_name="1 to make", dry_run=True)
+    assert summary.dry_run is True
+    assert summary.orphans_total == 1
+    assert summary.added == 0
 
 
 def test_save_recipe_and_add_to_collection(credentials: NytCredentials) -> None:

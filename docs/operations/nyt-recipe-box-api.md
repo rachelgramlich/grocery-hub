@@ -24,7 +24,9 @@ Grocery Wizard uses the same JSON endpoints as [cooking.nytimes.com](https://coo
 
 ## Streamlit
 
-The UI still uses **sync to Notion** only. Write APIs are for scripts and maintenance (account moves, bulk saves), not exposed in the app yet.
+**Add recipe → Sync from NYT Cooking** includes **Recipe box organization**: preview or file saved recipes that are not in any folder into a target folder (default `1 to make`, override with `GROCERY_WIZARD_NYT_ORPHAN_FOLDER`). This updates NYT only — run **Sync to Notion** separately.
+
+Other write helpers remain available for scripts (`scripts/nyt_orphans_to_folder.py`).
 
 ## One-off account migration
 

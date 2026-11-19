@@ -11,6 +11,7 @@ __all__ = [
     "NytCredentials",
     "NytNetworkError",
     "NytNotFoundError",
+    "NytOrphanFileSummary",
     "NytRecipe",
     "NytRecipeBoxFolder",
     "NytSavedRecipe",
@@ -19,9 +20,14 @@ __all__ = [
     "NytSyncRunResult",
     "NytSyncSummary",
     "credentials_status",
+    "default_orphan_target_folder",
+    "file_orphans_into_folder",
     "format_metadata_review",
+    "format_orphan_file_summary",
     "format_sync_summary",
+    "list_orphan_recipes",
     "list_recipe_box_folders",
+    "list_recipe_ids_in_any_folder",
     "load_credentials",
     "load_sync_report",
     "prompt_collection_choice",
@@ -33,6 +39,7 @@ __all__ = [
 import json
 import os
 import re
+import time
 from collections.abc import Callable, Iterator
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
@@ -53,6 +60,9 @@ USER_AGENT = (
 )
 REQUEST_TIMEOUT = 30
 DEFAULT_PER_PAGE = 48
+DEFAULT_NYT_ORPHAN_FOLDER = "1 to make"
+NYT_ORPHAN_FOLDER_ENV = "GROCERY_WIZARD_NYT_ORPHAN_FOLDER"
+DEFAULT_ORPHAN_FILE_DELAY_SECONDS = 0.25
 
 _REGI_ID_PATTERN = re.compile(r"regi_id=(\d+)", re.IGNORECASE)
 _HTML_TAGS = re.compile(r"<[^>]+>")
@@ -517,6 +527,104 @@ class NYTCookingClient:
             ingredients=recipe.ingredients,
             author=recipe.author,
         )
+
+
+def default_orphan_target_folder() -> str:
+    """Default NYT folder for filing unfiled recipes (Streamlit + scripts)."""
+    custom = os.getenv(NYT_ORPHAN_FOLDER_ENV, "").strip()
+    if custom:
+        return custom
+    return DEFAULT_NYT_ORPHAN_FOLDER
+
+
+def list_recipe_ids_in_any_folder(client: NYTCookingClient) -> set[str]:
+    """Recipe ids that appear in at least one recipe-box folder."""
+    ids: set[str] = set()
+    for collection in client.list_collections():
+        ids.update(client.collection_recipe_ids(collection.id))
+    return ids
+
+
+def list_orphan_recipes(client: NYTCookingClient) -> list[NytSavedRecipe]:
+    """Saved recipes in the recipe box that are not in any folder."""
+    in_folders = list_recipe_ids_in_any_folder(client)
+    return [recipe for recipe in client.iter_all_saved_recipes() if recipe.id not in in_folders]
+
+
+@dataclass
+class NytOrphanFileSummary:
+    orphans_total: int = 0
+    added: int = 0
+    already_in_folder: int = 0
+    failed: int = 0
+    dry_run: bool = False
+    target_folder: str = ""
+    failed_ids: list[str] = field(default_factory=list)
+
+
+def format_orphan_file_summary(summary: NytOrphanFileSummary) -> str:
+    if summary.dry_run:
+        return (
+            f"Preview: {summary.orphans_total} unfiled recipe(s) would be added to "
+            f"'{summary.target_folder}' on NYT Cooking."
+        )
+    return (
+        f"Filing complete: added {summary.added}, already in folder {summary.already_in_folder}, "
+        f"failed {summary.failed} (target '{summary.target_folder}')."
+    )
+
+
+def file_orphans_into_folder(
+    client: NYTCookingClient,
+    *,
+    folder_name: str | None = None,
+    dry_run: bool = False,
+    delay_seconds: float = DEFAULT_ORPHAN_FILE_DELAY_SECONDS,
+    on_progress: NytSyncProgressCallback | None = None,
+) -> NytOrphanFileSummary:
+    """Add unfiled saved recipes to a folder (does not remove other folder memberships)."""
+    target = (folder_name or default_orphan_target_folder()).strip()
+    orphans = list_orphan_recipes(client)
+    summary = NytOrphanFileSummary(
+        orphans_total=len(orphans),
+        dry_run=dry_run,
+        target_folder=target,
+    )
+    if dry_run or not orphans:
+        _notify_sync_progress(
+            on_progress,
+            format_orphan_file_summary(summary),
+            processed=0,
+            total=len(orphans) or None,
+        )
+        return summary
+
+    folder = client.ensure_collection(target)
+    total = len(orphans)
+    for index, recipe in enumerate(orphans, start=1):
+        try:
+            status = client.add_to_collection(folder.id, recipe.id)
+            if status == 201:
+                summary.added += 1
+                message = f"Added: {recipe.name}"
+            else:
+                summary.already_in_folder += 1
+                message = f"Already in folder: {recipe.name}"
+        except NYTCookingError:
+            summary.failed += 1
+            summary.failed_ids.append(recipe.id)
+            message = f"Failed: {recipe.name}"
+        _notify_sync_progress(on_progress, message, processed=index, total=total)
+        if delay_seconds > 0 and index < total:
+            time.sleep(delay_seconds)
+
+    _notify_sync_progress(
+        on_progress,
+        format_orphan_file_summary(summary),
+        processed=total,
+        total=total,
+    )
+    return summary
 
 
 def _recipe_box_total_count(client: NYTCookingClient) -> int | None:
