@@ -22,9 +22,6 @@ When the user names a **`/<kebab-case>`** workflow from **AGENTS.md** or asks to
 | `/create-command` | `.cursor/commands/shared/create-command.md` |
 | `/performance-audit` | `.cursor/commands/grocery-wizard/performance-audit.md` |
 | `/sync-store-aisles` | `.cursor/commands/grocery-wizard/sync-store-aisles.md` |
-| `/review` | `.cursor/commands/grocery-wizard/review.md` |
-| `/review-bugbot` | `.cursor/commands/grocery-wizard/review-bugbot.md` |
-| `/review-security` | `.cursor/commands/grocery-wizard/review-security.md` |
 
 **Not a command file:** **`tidy-first`** is the **`.cursor/skills/tidy-first/SKILL.md`** skill (auto or manual), not a duplicate of **`/tidy-project`**.
 
