@@ -26,8 +26,8 @@ if not os.environ.get("NOTION_DEBUG_LOGS_DATABASE_ID"):
     if w:
         os.environ["NOTION_DEBUG_LOGS_DATABASE_ID"] = w
 
-from grocery_wizard.config import load_config
-from grocery_wizard.integrations.notion import NotionRecipesDB
+from grocery_hub.config import load_config
+from grocery_hub.integrations.notion import NotionRecipesDB
 
 UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "

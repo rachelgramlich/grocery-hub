@@ -11,14 +11,14 @@ _REPO = Path(__file__).resolve().parents[1]
 if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 
-from src.grocery_wizard.config import load_config  # noqa: E402
-from src.grocery_wizard.integrations.notion import NotionRecipesDB  # noqa: E402
-from src.grocery_wizard.integrations.nyt_cooking import (  # noqa: E402
+from src.grocery_hub.config import load_config  # noqa: E402
+from src.grocery_hub.integrations.notion import NotionRecipesDB  # noqa: E402
+from src.grocery_hub.integrations.nyt_cooking import (  # noqa: E402
     NYTCookingClient,
     credentials_status,
     load_credentials,
 )
-from src.grocery_wizard.recipes.recipe_maintenance import (  # noqa: E402
+from src.grocery_hub.recipes.recipe_maintenance import (  # noqa: E402
     format_backfill_summary,
     format_common_metadata_repair_summary,
     recipes_invalid_dinner_category,

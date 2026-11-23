@@ -11,7 +11,7 @@ OUT_DIR = POC_ROOT / "out"
 
 def repo_root() -> Path:
     try:
-        from src.grocery_wizard.paths import REPO_ROOT
+        from src.grocery_hub.paths import REPO_ROOT
 
         return REPO_ROOT
     except ImportError:

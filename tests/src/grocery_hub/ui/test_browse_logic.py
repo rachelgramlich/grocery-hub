@@ -1,0 +1,191 @@
+"""Browse recipes filter and sort helpers."""
+
+from __future__ import annotations
+
+import hashlib
+from datetime import UTC, datetime
+
+from src.grocery_hub.integrations.notion import Recipe
+from src.grocery_hub.planning.meal_planner import MealPlanFilters
+from src.grocery_hub.recipes.recipe_meal_plan_stats import STATUS_DEPRECATED, STATUS_PAUSED
+from src.grocery_hub.ui.browse_logic import (
+    BrowseAppliedFilters,
+    browse_recipe_passes_status_filter,
+    browse_recipes_for_applied,
+    render_browse_grid_html,
+    sort_browse_recipes,
+)
+
+
+def _recipe(
+    name: str,
+    *,
+    page_id: str,
+    selection: int = 0,
+    rejection: int = 0,
+    edited: datetime | None = None,
+    image: str | None = None,
+) -> Recipe:
+    return Recipe(
+        page_id=page_id,
+        name=name,
+        link=None,
+        ingredients=None,
+        properties={
+            "Selection count": selection,
+            "Rejection count": rejection,
+        },
+        last_edited_time=edited,
+        image_file_url=image,
+    )
+
+
+def _browse_shuffle_rank(page_id: str, sort_seed: int) -> int:
+    digest = hashlib.md5(f"{page_id}:{sort_seed}".encode(), usedforsecurity=False)
+    return int.from_bytes(digest.digest()[:4], "big")
+
+
+def test_sort_browse_recipes_uses_session_seed_shuffle() -> None:
+    recipes = [
+        _recipe(
+            "B",
+            page_id="b",
+            selection=2,
+            rejection=1,
+            edited=datetime(2025, 1, 2, tzinfo=UTC),
+        ),
+        _recipe(
+            "A",
+            page_id="a",
+            selection=1,
+            rejection=0,
+            edited=datetime(2025, 1, 3, tzinfo=UTC),
+        ),
+        _recipe(
+            "C",
+            page_id="c",
+            selection=2,
+            rejection=1,
+            edited=datetime(2025, 1, 1, tzinfo=UTC),
+        ),
+    ]
+    sort_seed = 42
+    ordered = sort_browse_recipes(
+        recipes,
+        sort_seed=sort_seed,
+        selection_column="Selection count",
+        rejections_column="Rejection count",
+    )
+    names = [recipe.name for recipe in ordered]
+    expected = sorted(
+        recipes,
+        key=lambda recipe: _browse_shuffle_rank(recipe.page_id, sort_seed),
+    )
+    assert names == [recipe.name for recipe in expected]
+
+    other_seed_order = sort_browse_recipes(
+        recipes,
+        sort_seed=sort_seed + 1,
+        selection_column="Selection count",
+        rejections_column="Rejection count",
+    )
+    assert [recipe.name for recipe in other_seed_order] != names
+
+
+def test_has_image_filter_excludes_placeholders() -> None:
+    from unittest.mock import MagicMock
+
+    from src.grocery_hub.integrations.notion import DatabaseSchema
+
+    db = MagicMock()
+    db.schema = DatabaseSchema(
+        name_column="Name",
+        link_column="Link",
+        ingredients_column=None,
+        filter_columns=[],
+        checkbox_columns=[],
+        all_columns={},
+        image_column="Cover image",
+    )
+    recipes = [
+        _recipe("With photo", page_id="1", image="https://notion.so/file.jpg"),
+        _recipe("No photo", page_id="2", image=None),
+    ]
+    notion_only = _recipe("Notion only", page_id="3", image=None)
+    notion_only.properties["Cover image"] = ["cover.jpg"]
+    recipes.append(notion_only)
+    applied = BrowseAppliedFilters(meal_filters=MealPlanFilters(), has_image=True)
+    result = browse_recipes_for_applied(
+        recipes,
+        db,
+        applied,
+        ingredient_index=None,
+        sort_seed=1,
+    )
+    assert [r.name for r in result] == ["With photo"]
+    applied_off = BrowseAppliedFilters(meal_filters=MealPlanFilters(), has_image=False)
+    result_off = browse_recipes_for_applied(
+        recipes,
+        db,
+        applied_off,
+        ingredient_index=None,
+        sort_seed=1,
+    )
+    assert {r.name for r in result_off} == {"With photo", "No photo", "Notion only"}
+
+
+def test_status_filter_hides_paused_and_deprecated_by_default() -> None:
+    paused = _recipe("Pause me", page_id="p1")
+    paused.properties["Meal plan status"] = STATUS_PAUSED
+    deprecated = _recipe("Old", page_id="p2")
+    deprecated.properties["Meal plan status"] = STATUS_DEPRECATED
+    applied = BrowseAppliedFilters(meal_filters=MealPlanFilters(), has_image=False)
+    assert not browse_recipe_passes_status_filter(
+        paused,
+        applied=applied,
+        status_column="Meal plan status",
+    )
+    applied_both = BrowseAppliedFilters(
+        meal_filters=MealPlanFilters(),
+        has_image=False,
+        include_paused=True,
+        include_deprecated=True,
+    )
+    assert browse_recipe_passes_status_filter(
+        deprecated,
+        applied=applied_both,
+        status_column="Meal plan status",
+    )
+
+
+def test_render_browse_grid_html_includes_placeholder_and_title() -> None:
+    html = render_browse_grid_html(
+        [_recipe("Soup", page_id="x", image=None)],
+        limit=24,
+    )
+    assert "gw-browse-grid" in html
+    assert "No photo" in html
+    assert "Soup" in html
+    assert "gw-browse-card-caption" in html
+    assert "gw-browse-tile-title" in html
+    assert "pointer-events" not in html
+
+
+def test_render_browse_grid_html_shows_notion_only_when_no_url() -> None:
+    from src.grocery_hub.integrations.notion import DatabaseSchema
+
+    schema = DatabaseSchema(
+        name_column="Name",
+        link_column="Link",
+        ingredients_column=None,
+        filter_columns=[],
+        checkbox_columns=[],
+        all_columns={},
+        image_column="Cover image",
+    )
+    recipe = _recipe("Stew", page_id="y", image=None)
+    recipe.properties["Cover image"] = ["on-notion.jpg"]
+    html = render_browse_grid_html([recipe], limit=24, schema=schema)
+    assert "Photo in Notion" in html
+    assert "gw-browse-tile-not-loaded" in html
+    assert "No photo" not in html

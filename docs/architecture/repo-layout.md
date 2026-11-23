@@ -1,12 +1,12 @@
 # Repository layout
 
-Grocery Wizard is a **Python package** (`src/grocery_wizard/`) plus **docs**, **tests**, and **agent tooling**. The product surface is **Streamlit**; data lives in **Notion**.
+Grocery Hub is a **Python package** (`src/grocery_hub/`) plus **docs**, **tests**, and **agent tooling**. The product surface is **Streamlit**; data lives in **Notion**.
 
 ## Top level
 
 ```
-grocery-wizard/
-├── src/grocery_wizard/      # installable package (all product code)
+grocery-hub/
+├── src/grocery_hub/      # installable package (all product code)
 ├── tests/                   # pytest (mirrors src layout + fixtures)
 ├── docs/                    # human docs (see docs/README.md)
 ├── scripts/                 # one-off maintainer scripts (see scripts/README.md)
@@ -20,9 +20,9 @@ grocery-wizard/
 └── README.md                # repo front door
 ```
 
-**Gitignored runtime data:** `.env` / `secrets.toml`, `.local/grocery-wizard/`, `.venv/`.
+**Gitignored runtime data:** `.env` / `secrets.toml`, `.local/grocery_hub/`, `.venv/`.
 
-## Package (`src/grocery_wizard/`)
+## Package (`src/grocery_hub/`)
 
 Folders are grouped by **job**, not by layer. Dependency flow is mostly: `ui` → domain modules → `integrations` / `config`.
 
@@ -40,7 +40,7 @@ Folders are grouped by **job**, not by layer. Dependency flow is mostly: `ui` �
 | `paths.py` | Repo/package/UI path anchors (no I/O) — see [`path-anchors.md`](path-anchors.md) |
 
 ```
-src/grocery_wizard/
+src/grocery_hub/
 ├── ui/
 │   ├── app.py                 # thin entry: nav, theme, cache controls
 │   ├── ids.py                 # page.block.control IDs
@@ -64,12 +64,12 @@ src/grocery_wizard/
 
 ```
 tests/
-├── src/grocery_wizard/        # mirrors package folders (test_*.py)
+├── src/grocery_hub/        # mirrors package folders (test_*.py)
 └── fixtures/
     └── golden_grocery_weeks/  # exported list regressions (`just golden-grocery`)
 ```
 
-UI tests import paths from `tests/src/grocery_wizard/ui/ui_source.py` and `tests/repo_paths.py` — do not hard-code `app.py` or `parents[N]` paths. See [`path-anchors.md`](path-anchors.md) and [`tests/README.md`](../../tests/README.md).
+UI tests import paths from `tests/src/grocery_hub/ui/ui_source.py` and `tests/repo_paths.py` — do not hard-code `app.py` or `parents[N]` paths. See [`path-anchors.md`](path-anchors.md) and [`tests/README.md`](../../tests/README.md).
 
 ## Documentation (`docs/`)
 
@@ -88,7 +88,7 @@ Index: [`docs/README.md`](../README.md).
 
 | Path | Role |
 | --- | --- |
-| `.cursor/commands/grocery-wizard/` | App-specific slash commands |
+| `.cursor/commands/grocery-hub/` | App-specific slash commands |
 | `.cursor/commands/shared/` → `rg-ai` | Shared commands (work-on-issue, tidy-project, …) |
 | `.cursor/skills/tidy-first/` | Inline structure-only tidying while coding |
 | `.github/workflows/` | `just ci`, optional live Notion read-only job |
@@ -97,12 +97,12 @@ Index: [`docs/README.md`](../README.md).
 
 | Kind of change | Put it here |
 | --- | --- |
-| New Streamlit page | `src/grocery_wizard/ui/views/` (+ IDs in `ids.py`, doc in `docs/ui/ui-map.md`) |
-| Shared widget (multi-page) | `src/grocery_wizard/ui/components/` |
-| New Notion or NYT integration | `src/grocery_wizard/integrations/` |
-| In-app GitHub feedback | `src/grocery_wizard/integrations/feedback_*.py` |
+| New Streamlit page | `src/grocery_hub/ui/views/` (+ IDs in `ids.py`, doc in `docs/ui/ui-map.md`) |
+| Shared widget (multi-page) | `src/grocery_hub/ui/components/` |
+| New Notion or NYT integration | `src/grocery_hub/integrations/` |
+| In-app GitHub feedback | `src/grocery_hub/integrations/feedback_*.py` |
 | New domain logic (no UI) | Matching folder under `recipes/`, `shopping/`, etc. |
-| Regression test | Mirror path under `tests/src/grocery_wizard/` |
+| Regression test | Mirror path under `tests/src/grocery_hub/` |
 | Operator runbook | `docs/operations/` |
 | UI or UX spec | `docs/ui/` or `docs/issues/` until shipped |
 | Spike / prototype | `docs/poc/<name>/` until promoted into `src/` |

@@ -1,6 +1,6 @@
 # Recipe images + Browse recipes — POC & design pack
 
-Engineering reference for GitHub issues **[#490](https://github.com/rachelgramlich/grocery-wizard/issues/490)** (backfill + Add Recipe images), **[#491](https://github.com/rachelgramlich/grocery-wizard/issues/491)** (Browse grid), **[#492](https://github.com/rachelgramlich/grocery-wizard/issues/492)** (card tap V2).
+Engineering reference for GitHub issues **[#490](https://github.com/rachelgramlich/grocery-hub/issues/490)** (backfill + Add Recipe images), **[#491](https://github.com/rachelgramlich/grocery-hub/issues/491)** (Browse grid), **[#492](https://github.com/rachelgramlich/grocery-hub/issues/492)** (card tap V2).
 
 This folder is **not** production code. Scripts are smoke tests and resolvers to lift into `src/` when implementing.
 

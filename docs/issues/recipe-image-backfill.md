@@ -1,7 +1,7 @@
 # Recipe image backfill (enhancement draft)
 
-> **Filed:** https://github.com/rachelgramlich/grocery-wizard/issues/490 — use `/work-on-issue 490`.
-> **Labels:** `grocery-wizard`, `gw-area-recipes` (UI trigger on Recipe maintenance optional)
+> **Filed:** https://github.com/rachelgramlich/grocery-hub/issues/490 — use `/work-on-issue 490`.
+> **Labels:** `grocery-hub`, `gw-area-recipes` (UI trigger on Recipe maintenance optional)
 > **Enables:** `browse-recipes.md` (Browse grid reads Notion Files column)
 
 ## Description
@@ -24,7 +24,7 @@ Backfill a Notion **Files** property on the recipe database with a cover/thumbna
 | **Instagram** | **`/api/v1/oembed/?url=`** → `thumbnail_url` (prod 2/2); HTML og:image unreliable |
 | **General web** | HTML fetch + `og:image` / `twitter:image` (and JSON-LD image if present), following redirects |
 
-Reuse `USER_AGENT` / timeout conventions from `src/grocery_wizard/recipes/scraper.py` where possible; extract shared **image URL resolution** logic so Add Recipe and backfill do not duplicate host-specific code.
+Reuse `USER_AGENT` / timeout conventions from `src/grocery_hub/recipes/scraper.py` where possible; extract shared **image URL resolution** logic so Add Recipe and backfill do not duplicate host-specific code.
 
 **Notion:**
 

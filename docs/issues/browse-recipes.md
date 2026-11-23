@@ -1,7 +1,7 @@
 # Browse recipes (enhancement draft)
 
-> **Filed:** https://github.com/rachelgramlich/grocery-wizard/issues/491 — use `/work-on-issue 491`.
-> **Labels:** `grocery-wizard`, `gw-area-ui`
+> **Filed:** https://github.com/rachelgramlich/grocery-hub/issues/491 — use `/work-on-issue 491`.
+> **Labels:** `grocery-hub`, `gw-area-ui`
 > **Depends on:** Notion **Files** image column on recipes (see `recipe-image-backfill.md` for populating it).
 
 ## Description
@@ -29,10 +29,10 @@ Add a new top-level Streamlit page so users can visually browse the recipe libra
 
 **Engineering hygiene (per `AGENTS.md`):**
 
-- Register `PAGE_SLUG_BROWSE` (or equivalent) and page label in `src/grocery_wizard/ui/ids.py` and `src/grocery_wizard/ui/views/__init__.py`.
+- Register `PAGE_SLUG_BROWSE` (or equivalent) and page label in `src/grocery_hub/ui/ids.py` and `src/grocery_hub/ui/views/__init__.py`.
 - Update `docs/ui/ui-map.md` with page, blocks (e.g. `browse.filters`, `browse.apply`, `browse.grid`, `browse.load_more`), and control IDs.
 - Extend holistic UI smoke (`just smoke-ui`) to import/render the browse page.
-- Add perf-audit scenario in `src/grocery_wizard/dev/perf_audit/scenarios.py` covering Apply + load more.
+- Add perf-audit scenario in `src/grocery_hub/dev/perf_audit/scenarios.py` covering Apply + load more.
 - Browser smoke optional when Notion CI preflight succeeds.
 
 **Notion / data model:**

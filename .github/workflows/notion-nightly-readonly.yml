@@ -112,17 +112,17 @@ jobs:
 
       - name: Notion config preflight
         if: steps.notion.outputs.enabled == 'true'
-        run: PYTHONPATH=src uv run python -c "from grocery_wizard.config import load_config; load_config(); print('notion ok')"
+        run: PYTHONPATH=src uv run python -c "from grocery_hub.config import load_config; load_config(); print('notion ok')"
 
       - name: Notion CI schema and recipe query smoke
         if: steps.notion.outputs.enabled == 'true'
-        run: PYTHONPATH=src uv run python -m grocery_wizard.integrations.notion_ci_schema
+        run: PYTHONPATH=src uv run python -m grocery_hub.integrations.notion_ci_schema
 
       - name: Live Notion read-only smoke (optional tests)
         if: steps.notion.outputs.enabled == 'true'
         run: |
           uv run pytest \
-            tests/src/grocery_wizard/ui/test_holistic_ui_smoke_apptest.py \
+            tests/src/grocery_hub/ui/test_holistic_ui_smoke_apptest.py \
             -k "live and read_only" \
             -q
 
@@ -167,8 +167,8 @@ jobs:
               body,
             };
             try {
-              await github.rest.issues.create({ ...payload, labels: ["notion-ci", "grocery-wizard"] });
+              await github.rest.issues.create({ ...payload, labels: ["notion-ci", "grocery-hub"] });
             } catch (error) {
-              core.warning(`Could not apply notion-ci label (${error.message}); using grocery-wizard only.`);
-              await github.rest.issues.create({ ...payload, labels: ["grocery-wizard"] });
+              core.warning(`Could not apply notion-ci label (${error.message}); using grocery-hub only.`);
+              await github.rest.issues.create({ ...payload, labels: ["grocery-hub"] });
             }

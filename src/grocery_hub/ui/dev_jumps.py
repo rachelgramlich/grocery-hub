@@ -1,0 +1,250 @@
+"""Dev-mode jump-to-step helpers for faster manual UI UAT."""
+
+from __future__ import annotations
+
+__all__ = [
+    "DEFAULT_DEV_MEAL_COUNT",
+    "DEV_JUMP_BUTTON_LABEL_FINAL_LIST",
+    "DEV_JUMP_BUTTON_LABEL_MEALS_FILLED_AUTO",
+    "DEV_JUMP_BUTTON_LABEL_MEALS_FILLED_MANUAL",
+    "DEV_JUMP_BUTTON_LABEL_PER_RECIPE_REVIEW",
+    "DEV_JUMP_BUTTON_LABEL_PRE_BUILD_GROCERY",
+    "DEV_JUMP_CAPTIONS",
+    "DEV_JUMP_FLOW_ORDER",
+    "DEV_MANUAL_RECIPES_KEY",
+    "DevJumpTarget",
+    "apply_dev_jump",
+    "commit_dev_jump",
+    "dev_jump_display_title",
+    "resolve_dev_jump_meal_names",
+    "sync_dev_manual_multiselect",
+]
+
+import random
+from enum import StrEnum
+from typing import TYPE_CHECKING, Any
+
+from src.grocery_hub.ui.grocery_flow import (
+    GROCERY_STASH_NOTION_GENERATION_KEY,
+    clear_grocery_session_overrides,
+    default_pre_build_grocery_options,
+    stash_grocery_result,
+    stash_recipe_review,
+)
+from src.grocery_hub.ui.ids import DEV_JUMP_BLOCK_ID
+from src.grocery_hub.ui.views.weekly_plan.state import _ack_dev_plan_meals_ready
+from src.grocery_hub.ui.views.weekly_plan.step_ui import WeeklyRailStep, set_expanded_step
+
+if TYPE_CHECKING:
+    from src.grocery_hub.integrations.notion import NotionRecipesDB, Recipe
+
+DEFAULT_DEV_MEAL_COUNT = 1
+_DEV_MEAL_PICK_SEED = 142
+DEV_MANUAL_RECIPES_KEY = "dev_jump_manual_recipes"
+_DEV_MANUAL_RECIPES_FP_KEY = "_dev_jump_manual_recipes_fingerprint"
+
+
+class DevJumpTarget(StrEnum):
+    MEALS_FILLED = "meals_filled"
+    PRE_BUILD_GROCERY = "pre_build_grocery"
+    PER_RECIPE_REVIEW = "per_recipe_review"
+    GROCERY_RESULT = "grocery_result"
+
+
+DEV_JUMP_FLOW_ORDER: tuple[DevJumpTarget, ...] = (
+    DevJumpTarget.MEALS_FILLED,
+    DevJumpTarget.PRE_BUILD_GROCERY,
+    DevJumpTarget.PER_RECIPE_REVIEW,
+    DevJumpTarget.GROCERY_RESULT,
+)
+
+# Streamlit button labels (keep in sync with tests and docs/ui-map dev jumps).
+DEV_JUMP_BUTTON_LABEL_MEALS_FILLED_AUTO = "Dev: Meals filled (auto)"
+DEV_JUMP_BUTTON_LABEL_MEALS_FILLED_MANUAL = "Dev: Meals filled (manual)"
+DEV_JUMP_BUTTON_LABEL_PRE_BUILD_GROCERY = "Dev: Pre-build grocery"
+DEV_JUMP_BUTTON_LABEL_PER_RECIPE_REVIEW = "Dev: Per-recipe review"
+DEV_JUMP_BUTTON_LABEL_FINAL_LIST = "Dev: Final list"
+
+
+def dev_jump_display_title(target: DevJumpTarget) -> str:
+    return {
+        DevJumpTarget.MEALS_FILLED: "Meals filled",
+        DevJumpTarget.PRE_BUILD_GROCERY: "Pre-build grocery",
+        DevJumpTarget.PER_RECIPE_REVIEW: "Per-recipe review",
+        DevJumpTarget.GROCERY_RESULT: "Final list",
+    }[target]
+
+
+DEV_JUMP_CAPTIONS: dict[DevJumpTarget, str] = {
+    DevJumpTarget.MEALS_FILLED: (
+        f"Block **{DEV_JUMP_BLOCK_ID[DevJumpTarget.MEALS_FILLED.value]}** (Plan meals) — "
+        "pick recipes in the multiselect (updates meals live) or use **auto** "
+        "for the default sample."
+    ),
+    DevJumpTarget.PRE_BUILD_GROCERY: (
+        f"Block **{DEV_JUMP_BLOCK_ID[DevJumpTarget.PRE_BUILD_GROCERY.value]}** (Grocery list) — "
+        "options expander and **Create grocery list**."
+    ),
+    DevJumpTarget.PER_RECIPE_REVIEW: (
+        f"Block **{DEV_JUMP_BLOCK_ID[DevJumpTarget.PER_RECIPE_REVIEW.value]}** — "
+        "edit ingredient lines in expanders before the list is built."
+    ),
+    DevJumpTarget.GROCERY_RESULT: (
+        f"Block **{DEV_JUMP_BLOCK_ID[DevJumpTarget.GROCERY_RESULT.value]}** — "
+        "built grocery list with re-add/remove, copy, and meals."
+    ),
+}
+
+
+def dev_jump_block_id(target: DevJumpTarget) -> str:
+    return DEV_JUMP_BLOCK_ID[target.value]
+
+
+def dev_manual_recipes_fingerprint(names: list[str]) -> tuple[str, ...]:
+    return tuple(name.strip().lower() for name in names if name.strip())
+
+
+def resolve_dev_jump_meal_names(
+    session_state: Any,
+    db: NotionRecipesDB,
+    *,
+    meal_count: int,
+    force_auto: bool = False,
+    recipes: list[Recipe] | None = None,
+) -> list[str]:
+    """Manual multiselect wins over auto sample unless *force_auto* is True."""
+    if not force_auto:
+        manual = session_state.get(DEV_MANUAL_RECIPES_KEY) or []
+        cleaned_manual = [name for name in manual if name.strip()]
+        if cleaned_manual:
+            return cleaned_manual
+    pool = recipes if recipes is not None else db.query_recipes()
+    return pick_default_recipe_names(pool, meal_count=meal_count)
+
+
+def sync_dev_manual_multiselect(session_state: Any) -> None:
+    """When dev manual recipe pick changes, align the meal plan and drop stale grocery UI."""
+    manual = list(session_state.get(DEV_MANUAL_RECIPES_KEY) or [])
+    fingerprint = dev_manual_recipes_fingerprint(manual)
+    previous = session_state.get(_DEV_MANUAL_RECIPES_FP_KEY)
+    if previous is not None and fingerprint == previous:
+        return
+
+    session_state[_DEV_MANUAL_RECIPES_FP_KEY] = fingerprint
+    if not manual:
+        return
+
+    clear_grocery_flow_state(session_state)
+    session_state["plan_meals_text"] = "\n".join(manual)
+    session_state["plan_prebuild_pinned_recipes"] = list(manual)
+    session_state.pop("plan_rejected_names", None)
+    session_state.pop("plan_slot_origins", None)
+    session_state.pop("weekly_plan_last_saved_name", None)
+    session_state.pop("weekly_plan_saved_fingerprint", None)
+
+
+def pick_default_recipe_names(
+    all_recipes: list[Recipe],
+    *,
+    meal_count: int = DEFAULT_DEV_MEAL_COUNT,
+) -> list[str]:
+    """Pick a small set of Notion recipes with ingredients for dev jumps."""
+    with_ingredients = [recipe for recipe in all_recipes if (recipe.ingredients or "").strip()]
+    pool = with_ingredients or list(all_recipes)
+    if not pool:
+        return []
+    rng = random.Random(_DEV_MEAL_PICK_SEED)
+    shuffled = sorted(pool, key=lambda recipe: recipe.name.lower())
+    rng.shuffle(shuffled)
+    return [recipe.name for recipe in shuffled[:meal_count]]
+
+
+def _set_dev_jump_rail_step(step_value: str) -> None:
+    set_expanded_step(WeeklyRailStep(step_value))
+
+
+def clear_grocery_flow_state(session_state: Any) -> None:
+    """Drop grocery result, review UI, and run-scoped pantry/recurring overrides."""
+    for key in (
+        "grocery_result",
+        "grocery_readd",
+        "grocery_remove_once",
+        "grocery_final_list",
+        "grocery_final_list_fingerprint",
+        "meals_final_list",
+        "meals_final_list_fingerprint",
+        "grocery_per_recipe_review",
+        "grocery_review_baseline",
+        "grocery_review_options",
+        "grocery_review_recipes",
+        "grocery_review_plan_fingerprint",
+        "grocery_review_baseline",
+        "grocery_review_save_to_notion",
+        GROCERY_STASH_NOTION_GENERATION_KEY,
+    ):
+        session_state.pop(key, None)
+    for key in list(session_state.keys()):
+        if str(key).startswith("review_ing_"):
+            session_state.pop(key, None)
+    clear_grocery_session_overrides(session_state)
+
+
+def commit_dev_jump(
+    session_state: Any,
+    db: NotionRecipesDB,
+    target: DevJumpTarget,
+    names: list[str],
+) -> list[str]:
+    """Apply a dev jump after recipe names are chosen; returns ``names`` used."""
+    cleaned = [name for name in names if name.strip()]
+    if not cleaned:
+        return []
+
+    clear_grocery_flow_state(session_state)
+    session_state["plan_meals_text"] = "\n".join(cleaned)
+    session_state.pop("plan_rejected_names", None)
+    session_state.pop("plan_slot_origins", None)
+    session_state.pop("weekly_plan_last_saved_name", None)
+    session_state.pop("weekly_plan_saved_fingerprint", None)
+
+    if target == DevJumpTarget.MEALS_FILLED:
+        _set_dev_jump_rail_step("plan_meals")
+        return cleaned
+
+    if target == DevJumpTarget.PRE_BUILD_GROCERY:
+        _ack_dev_plan_meals_ready(cleaned)
+        _set_dev_jump_rail_step("grocery_list")
+        return cleaned
+
+    grocery_options = default_pre_build_grocery_options(session_state)
+    recipes = db.query_recipes()
+
+    if target == DevJumpTarget.PER_RECIPE_REVIEW:
+        _ack_dev_plan_meals_ready(cleaned)
+        stash_recipe_review(session_state, cleaned, recipes, grocery_options)
+        _set_dev_jump_rail_step("grocery_list")
+        return cleaned
+
+    if target == DevJumpTarget.GROCERY_RESULT:
+        _ack_dev_plan_meals_ready(cleaned)
+        stash_grocery_result(session_state, db, cleaned, grocery_options, recipes=recipes)
+        _set_dev_jump_rail_step("grocery_list")
+        return cleaned
+
+    return cleaned
+
+
+def apply_dev_jump(
+    session_state: Any,
+    db: NotionRecipesDB,
+    target: DevJumpTarget,
+    *,
+    meal_count: int = DEFAULT_DEV_MEAL_COUNT,
+    recipe_names: list[str] | None = None,
+) -> list[str]:
+    """Resolve recipe names then commit the jump (CLI/tests helper)."""
+    if recipe_names is not None:
+        names = list(recipe_names)
+    else:
+        names = resolve_dev_jump_meal_names(session_state, db, meal_count=meal_count)
+    return commit_dev_jump(session_state, db, target, names)

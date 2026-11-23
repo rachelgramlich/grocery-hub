@@ -1,27 +1,27 @@
 # Repository split (2026)
 
-**Grocery Wizard** stays in this repository. After merge, rename it on GitHub to **`grocery-wizard`** so issues and history stay put.
+**Grocery Hub** stays in this repository. After merge, rename it on GitHub to **`grocery-hub`** so issues and history stay put.
 
 Personal snippets live in a separate repo: **[`rg-playground`](https://github.com/rachelgramlich/rg-playground)**.
 
 ## After merging the split PR
 
-1. GitHub → **Settings → General → Repository name** → `grocery-wizard`.
+1. GitHub → **Settings → General → Repository name** → `grocery-hub`.
 2. Create an empty repo **`rg-playground`** on GitHub.
 3. Seed it from branch **`rg-playground/initial`** on this repo (until merge, on `personal-repo`):
    ```shell
    git clone --branch rg-playground/initial \
-     https://github.com/rachelgramlich/grocery-wizard.git rg-playground
+     https://github.com/rachelgramlich/grocery-hub.git rg-playground
    cd rg-playground
    git remote set-url origin git@github.com:rachelgramlich/rg-playground.git
    git push -u origin main
    ```
-   (Use `personal-repo` in the clone URL until you have renamed to `grocery-wizard`.)
+   (Use `personal-repo` in the clone URL until you have renamed to `grocery-hub`.)
 4. Local remotes:
    ```shell
-   git remote set-url origin git@github.com:rachelgramlich/grocery-wizard.git
+   git remote set-url origin git@github.com:rachelgramlich/grocery-hub.git
    ```
-5. Cursor Cloud environment: point at `grocery-wizard` if it still references the old name.
+5. Cursor Cloud environment: point at `grocery-hub` if it still references the old name.
 
 ## What moved to `rg-playground`
 

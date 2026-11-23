@@ -1,0 +1,242 @@
+"""Tests for recipe classification."""
+
+from src.grocery_hub.recipes.classify import classify_column, classify_recipe
+from src.grocery_hub.recipes.weeknight import is_weeknight_friendly
+
+MEAL_OPTIONS = ["Drink", "Breakfast", "Lunch", "Dinner", "Snack/Side", "Dessert"]
+
+
+def test_meal_does_not_match_tea_inside_steamed() -> None:
+    """Regression: 'tea' must not match inside words like 'steamed'."""
+    ingredients = [
+        "2 chicken breasts, steamed and sliced",
+        "1 tbsp olive oil",
+        "salt and pepper",
+    ]
+    result = classify_column(
+        "Meal",
+        "Chicken and Rice Bowl",
+        ingredients,
+        allowed_options=MEAL_OPTIONS,
+    )
+    assert result != "Drink"
+
+
+def test_meal_classifies_dinner_from_pasta_title() -> None:
+    result = classify_column(
+        "Meal",
+        "Creamy Tomato Pasta",
+        ["8 oz spaghetti", "2 cloves garlic", "1 cup cream"],
+        allowed_options=MEAL_OPTIONS,
+    )
+    assert result == "Dinner"
+
+
+def test_meal_pasta_primavera_is_dinner_not_snack_side() -> None:
+    assert classify_column("Meal", "Pasta Primavera", [], allowed_options=MEAL_OPTIONS) == "Dinner"
+    assert (
+        classify_column(
+            "Meal",
+            "Pasta Primavera",
+            ["1 lb fusilli", "asparagus", "salad greens"],
+            allowed_options=MEAL_OPTIONS,
+        )
+        == "Dinner"
+    )
+    assert (
+        classify_column(
+            "Meal",
+            "Pasta Primavera",
+            ["Crusty bread or focaccia, for serving"],
+            allowed_options=MEAL_OPTIONS,
+        )
+        == "Dinner"
+    )
+    assert (
+        classify_column(
+            "Meal",
+            "Pasta Primavera",
+            ["Pita chips or another snack, for serving"],
+            allowed_options=MEAL_OPTIONS,
+        )
+        == "Dinner"
+    )
+    assert classify_column("Meal", "Primavera", [], allowed_options=MEAL_OPTIONS) == "Dinner"
+
+
+def test_meal_classifies_breakfast_from_title() -> None:
+    result = classify_column(
+        "Meal",
+        "Blueberry Pancakes",
+        ["1 cup flour", "2 eggs", "1 cup milk"],
+        allowed_options=MEAL_OPTIONS,
+    )
+    assert result == "Breakfast"
+
+
+def test_meal_returns_none_when_no_match() -> None:
+    result = classify_column(
+        "Meal",
+        "Mystery Dish",
+        ["item a", "item b"],
+        allowed_options=MEAL_OPTIONS,
+    )
+    assert result is None
+
+
+def test_meal_prefers_dinner_over_drink_when_both_could_match() -> None:
+    result = classify_column(
+        "Meal",
+        "Dinner cocktail pasta",
+        ["pasta", "tomato sauce"],
+        allowed_options=MEAL_OPTIONS,
+    )
+    assert result == "Dinner"
+
+
+def test_meal_classifies_actual_drink() -> None:
+    result = classify_column(
+        "Meal",
+        "Strawberry Smoothie",
+        ["1 cup strawberries", "1 cup yogurt", "1 tbsp honey"],
+        allowed_options=MEAL_OPTIONS,
+    )
+    assert result == "Drink"
+
+
+def test_classify_recipe_leaves_unmatched_meal_empty() -> None:
+    result = classify_recipe(
+        "Mystery Dish",
+        ["item a", "item b"],
+        [("Meal", "select", MEAL_OPTIONS)],
+    )
+    assert result["Meal"] is None
+
+
+def test_meal_lunch_is_sandwich_only() -> None:
+    assert (
+        classify_column("Meal", "Chickpea Salad Sandwich", [], allowed_options=MEAL_OPTIONS)
+        == "Lunch"
+    )
+    assert (
+        classify_column("Meal", "Lemon Potato Salad With Mint", [], allowed_options=MEAL_OPTIONS)
+        == "Snack/Side"
+    )
+
+
+def test_meal_salad_is_snack_side_not_dinner() -> None:
+    assert (
+        classify_column(
+            "Meal",
+            "Corn Salad With Mango and Halloumi",
+            [],
+            allowed_options=MEAL_OPTIONS,
+        )
+        == "Snack/Side"
+    )
+
+
+def test_meal_dessert_for_baking() -> None:
+    assert (
+        classify_column("Meal", "Peanut Butter Cookies", [], allowed_options=MEAL_OPTIONS)
+        == "Dessert"
+    )
+    assert (
+        classify_column(
+            "Meal",
+            "Salted Chocolate Chunk Shortbread Cookies",
+            [],
+            allowed_options=MEAL_OPTIONS,
+        )
+        == "Dessert"
+    )
+
+
+def test_meal_savory_pie_stays_dinner() -> None:
+    assert (
+        classify_column("Meal", "Skillet Chicken Potpie", [], allowed_options=MEAL_OPTIONS)
+        == "Dinner"
+    )
+    assert classify_column("Meal", "Samosa Pie", [], allowed_options=MEAL_OPTIONS) == "Dinner"
+
+
+def test_meal_dessert_vs_savory_crisp_edge_cases() -> None:
+    """Savory blockers beat dessert *crisp*; sweet crisps stay Dessert."""
+    assert classify_column("Meal", "Chile Crisp", [], allowed_options=MEAL_OPTIONS) == "Dinner"
+    assert classify_column("Meal", "Apple Crisp", [], allowed_options=MEAL_OPTIONS) == "Dessert"
+
+
+def test_meal_dessert_vs_savory_pie_and_tart_edge_cases() -> None:
+    assert classify_column("Meal", "Blueberry Pie", [], allowed_options=MEAL_OPTIONS) == "Dessert"
+    assert classify_column("Meal", "Tomato Tart", [], allowed_options=MEAL_OPTIONS) == "Dinner"
+
+
+def test_meal_savory_blockers_in_ingredients_block_dessert_title() -> None:
+    assert (
+        classify_column(
+            "Meal",
+            "Apple Crisp",
+            ["1 boneless chicken breast"],
+            allowed_options=MEAL_OPTIONS,
+        )
+        == "Dinner"
+    )
+
+
+def test_meal_dessert_bars_without_savory_blockers() -> None:
+    assert classify_column("Meal", "Lemon Bars", [], allowed_options=MEAL_OPTIONS) == "Dessert"
+
+
+def test_meal_snack_side_alias_for_legacy_snack_option() -> None:
+    legacy_options = ["Drink", "Breakfast", "Lunch", "Dinner", "Snack", "Dessert"]
+    assert (
+        classify_column("Meal", "Corn Salad With Tomatoes", [], allowed_options=legacy_options)
+        == "Snack"
+    )
+
+
+def test_weeknight_friendly_requires_dinner() -> None:
+    assert is_weeknight_friendly("Quick Cookies", meal="Dessert", total_minutes=20) is False
+
+
+def test_weeknight_friendly_from_nyt_time() -> None:
+    assert is_weeknight_friendly("Butter Paneer", meal="Dinner", total_minutes=30) is True
+    assert is_weeknight_friendly("Slow Roast Chicken", meal="Dinner", total_minutes=90) is False
+
+
+def test_weeknight_friendly_from_title_heuristics() -> None:
+    assert is_weeknight_friendly("One-Pot Chermoula Shrimp and Orzo", meal="Dinner") is True
+    assert is_weeknight_friendly("Sheet Pan Chicken", meal="Dinner") is True
+    assert is_weeknight_friendly("Classic Beef Bourguignon", meal="Dinner") is False
+
+
+def test_classify_recipe_sets_dinner_category_na_for_dessert() -> None:
+    dinner_opts = ["Pasta", "One-Pot / One-Pan", "N/A"]
+    result = classify_recipe(
+        "Skillet Brownie With Chocolate Ganache Frosting",
+        [],
+        [
+            ("Meal", "multi_select", MEAL_OPTIONS),
+            ("Dinner Category", "multi_select", dinner_opts),
+        ],
+    )
+    assert result["Meal"] == ["Dessert"]
+    assert result["Dinner Category"] == ["N/A"]
+
+
+def test_classify_recipe_sheet_pan_paneer_is_dinner() -> None:
+    result = classify_recipe(
+        "Sheet-Pan Paneer Tikka",
+        ["paneer", "garam masala"],
+        [("Meal", "multi_select", MEAL_OPTIONS)],
+    )
+    assert result["Meal"] == ["Dinner"]
+
+
+def test_classify_recipe_focaccia_is_snack_side() -> None:
+    result = classify_recipe(
+        "Focaccia",
+        ["flour", "yeast"],
+        [("Meal", "multi_select", MEAL_OPTIONS)],
+    )
+    assert result["Meal"] == ["Snack/Side"]

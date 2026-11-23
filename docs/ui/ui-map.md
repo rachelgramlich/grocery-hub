@@ -1,4 +1,4 @@
-# Grocery Wizard UI map
+# Grocery Hub UI map
 
 Vocabulary for issues, feedback, tests, and agents.
 
@@ -25,7 +25,7 @@ Vocabulary for issues, feedback, tests, and agents.
 | `pantry` | Pantry & recurring |
 | `maintenance` | Recipe maintenance |
 
-Constants: `src/grocery_wizard/ui/ids.py`, labels: `src/grocery_wizard/ui/views/__init__.py`.
+Constants: `src/grocery_hub/ui/ids.py`, labels: `src/grocery_hub/ui/views/__init__.py`.
 
 ## Global controls
 
