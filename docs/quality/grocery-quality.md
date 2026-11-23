@@ -16,7 +16,7 @@ Fixtures live in `tests/fixtures/golden_grocery_weeks/*.json`. Each file include
 just golden-grocery
 ```
 
-These tests run the **full export pipeline** in `src/grocery_wizard/shopping/weekly_grocery_export.py` (review formatting → `build_grocery_result_payload` → `compute_grocery_drafts` → copy text).
+These tests run the **full export pipeline** in `src/grocery_hub/shopping/weekly_grocery_export.py` (review formatting → `build_grocery_result_payload` → `compute_grocery_drafts` → copy text).
 
 **Add your real saved week** (requires Notion credentials):
 
@@ -35,7 +35,7 @@ Commit the new JSON. CI will fail if the list changes until you update `expect_g
 
 ## List invariants (every golden week)
 
-`src/grocery_wizard/shopping/grocery_invariants.py` checks:
+`src/grocery_hub/shopping/grocery_invariants.py` checks:
 
 - No duplicate normalized item keys
 - Every line is idempotent under `normalize_grocery_list_item`
@@ -51,7 +51,7 @@ Commit the new JSON. CI will fail if the list changes until you update `expect_g
 ## When a user reports a bad line
 
 1. Fix the parser/shopping bug.
-2. Add a **focused test** in `tests/src/grocery_wizard/shopping/test_grocery_list.py` (merge/dedupe/pantry) or extend **`parser_regression_bundle.json`** when the bug needs a tiny multi-recipe week — not a one-line normalize test alone.
+2. Add a **focused test** in `tests/src/grocery_hub/shopping/test_grocery_list.py` (merge/dedupe/pantry) or extend **`parser_regression_bundle.json`** when the bug needs a tiny multi-recipe week — not a one-line normalize test alone.
 3. Refresh a **real golden week** only when a whole saved plan should become a new long-term anchor (occasionally), not after every fix.
 4. **`just golden-grocery`** still runs all fixtures + invariants on every PR.
 
@@ -74,13 +74,13 @@ Default **CI** (`just ci`) still uses fake Notion IDs — every PR runs golden w
 
 | Trigger | Behavior |
 | --- | --- |
-| **`pull_request` → `main`** (same repo) | When **`NOTION_CI_API_KEY`** plus the four **`NOTION_CI_*_DATABASE_ID`** secrets are set, runs config preflight, **schema + recipe query smoke** (`python -m grocery_wizard.integrations.notion_ci_schema`), then live read-only AppTest cases (`live_notion_smoke_enabled()` / `-k "live and read_only"`). |
+| **`pull_request` → `main`** (same repo) | When **`NOTION_CI_API_KEY`** plus the four **`NOTION_CI_*_DATABASE_ID`** secrets are set, runs config preflight, **schema + recipe query smoke** (`python -m grocery_hub.integrations.notion_ci_schema`), then live read-only AppTest cases (`live_notion_smoke_enabled()` / `-k "live and read_only"`). |
 | **Fork PR** or **missing secrets** | Job **succeeds** with a skip message — does not fail the PR. |
 | **`workflow_dispatch`** (manual) | Same checks when secrets exist — run from Actions tab when you want a live smoke without opening a PR. |
 | **Workflow failure** (secrets enabled) | Opens a **`notion-ci`** GitHub issue (deduped by title) — does not block PR merges. |
 
 Use a **separate test Notion workspace** (not production), or parallel **`[GW CI]`** databases with integration access scoped to CI. **GitHub Actions:** `NOTION_CI_API_KEY` (mapped to `NOTION_API_KEY` in the job), optional `NOTION_DATA_SOURCE_ID`, and the four `NOTION_CI_*_DATABASE_ID` secrets (mapped to `NOTION_*_DATABASE_ID`). Step-by-step setup: **[`docs/operations/notion-ci-setup.md`](notion-ci-setup.md)** (GitHub issue **#426**).
 
-**Local live tests:** default pytest loads prod `NOTION_*` from repo-root `.env` for `-k "live and read_only"`. To hit the **CI workspace** instead, keep `NOTION_API_KEY` in `.env`, export the four `NOTION_CI_*_DATABASE_ID` values, and set `GROCERY_WIZARD_NOTION_CI_LIVE=1` (see `tests/notion_test_env.py`). Run `PYTHONPATH=src uv run python -m grocery_wizard.integrations.notion_ci_schema` before pytest to catch schema drift early.
+**Local live tests:** default pytest loads prod `NOTION_*` from repo-root `.env` for `-k "live and read_only"`. To hit the **CI workspace** instead, keep `NOTION_API_KEY` in `.env`, export the four `NOTION_CI_*_DATABASE_ID` values, and set `GROCERY_HUB_NOTION_CI_LIVE=1` (see `tests/notion_test_env.py`). Run `PYTHONPATH=src uv run python -m grocery_hub.integrations.notion_ci_schema` before pytest to catch schema drift early.
 
 Golden weeks catch **list logic** regressions without secrets; live integration catches **Notion schema / API** drift when secrets are present.

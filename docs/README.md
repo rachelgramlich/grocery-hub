@@ -1,6 +1,6 @@
 # Documentation map
 
-Start here when you need a guide, UI reference, or quality sign-off doc. **Code** lives under `src/grocery_wizard/`; **this tree** is for humans and agents.
+Start here when you need a guide, UI reference, or quality sign-off doc. **Code** lives under `src/grocery_hub/`; **this tree** is for humans and agents.
 
 | Folder | What belongs here |
 | --- | --- |
@@ -15,8 +15,8 @@ Start here when you need a guide, UI reference, or quality sign-off doc. **Code*
 
 | I want to… | Read |
 | --- | --- |
-| Use the app day to day | [`src/grocery_wizard/README.md`](../src/grocery_wizard/README.md) |
-| Wire Notion databases | [`src/grocery_wizard/config/README.md`](../src/grocery_wizard/config/README.md) |
+| Use the app day to day | [`src/grocery_hub/README.md`](../src/grocery_hub/README.md) |
+| Wire Notion databases | [`src/grocery_hub/config/README.md`](../src/grocery_hub/config/README.md) |
 | Understand the whole repo tree | [`architecture/repo-layout.md`](architecture/repo-layout.md) |
 | Path constants (src + tests) | [`architecture/path-anchors.md`](architecture/path-anchors.md) |
 | Ship to Streamlit Cloud | [`operations/household-deploy.md`](operations/household-deploy.md) |
@@ -25,12 +25,12 @@ Start here when you need a guide, UI reference, or quality sign-off doc. **Code*
 | Run `/performance-audit` | [`quality/performance-audit.md`](quality/performance-audit.md) |
 | Contribute / lint / tests | [`CONTRIBUTING.md`](../CONTRIBUTING.md) |
 | Agent workflows | [`AGENTS.md`](../AGENTS.md) |
-| Deferred: AI PR review (Bugbot) | [#551](https://github.com/rachelgramlich/grocery-wizard/issues/551) |
+| Deferred: AI PR review (Bugbot) | [#551](https://github.com/rachelgramlich/grocery-hub/issues/551) |
 
 ## Package-local docs
 
 Some design notes stay next to the code they describe:
 
-- [`src/grocery_wizard/ingredients/ARCHITECTURE.md`](../src/grocery_wizard/ingredients/ARCHITECTURE.md) — ingredient storage vs grocery-list pipelines
+- [`src/grocery_hub/ingredients/ARCHITECTURE.md`](../src/grocery_hub/ingredients/ARCHITECTURE.md) — ingredient storage vs grocery-list pipelines
 
-Do not add new markdown under `src/grocery_wizard/docs/`; use the folders above.
+Do not add new markdown under `src/grocery_hub/docs/`; use the folders above.

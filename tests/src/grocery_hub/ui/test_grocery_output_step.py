@@ -1,0 +1,45 @@
+"""Tests for grocery output step (added/removed summary and final list editing)."""
+
+from __future__ import annotations
+
+from ui_source import ui_source
+
+from src.grocery_hub.shopping.grocery_list_edits import apply_run_removals
+
+
+def test_apply_run_removals_filters_matching_lines() -> None:
+    items = ["2 cups milk", "eggs", "bread"]
+    assert apply_run_removals(items, {"milk"}) == ["eggs", "bread"]
+
+
+def test_apply_run_removals_does_not_drop_unrelated_milk_lines() -> None:
+    """Removing a compound milk line must not remove standalone recurring milk (#204)."""
+    items = ["coconut milk", "milk", "berries"]
+    assert apply_run_removals(items, {"coconut milk"}) == ["milk", "berries"]
+
+
+def test_output_step_shows_added_removed_and_editable_grocery_list() -> None:
+    source = ui_source()
+    result_block = source.split("def _render_grocery_result", 1)[1].split(
+        'if __name__ == "__main__"',
+        1,
+    )[0]
+    assert "_render_added_and_removed_summary" in result_block
+    assert 'st.expander("Summary", expanded=False)' in source
+    assert "**Added**" in source
+    assert "**Removed (pantry)**" in source
+    assert 'with st.expander("Adjust this week\'s list"' in source
+    assert "Add to grocery list from pantry (1x)" in source
+    assert "Remove from grocery list (1x)" in source
+    assert "Remove and add to pantry" not in source
+    assert 'with st.expander("Customize list"' not in result_block
+    assert "### Copy list" in result_block
+    assert "Extra items (one per line)" not in result_block
+    assert "Copy meals** for Apple Notes" in result_block
+    assert "render_copy_button" in result_block
+    assert "st.download_button" not in result_block
+    assert "Download list" not in result_block
+    assert 'key="grocery_edit_meals"' not in result_block
+    assert 'key="grocery_update_list"' not in result_block
+    assert 'key="grocery_final_list"' in result_block
+    assert "disabled=True" not in result_block

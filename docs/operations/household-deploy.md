@@ -1,6 +1,6 @@
 # Household deploy (Streamlit Community Cloud)
 
-Locked requirements for [#354](https://github.com/rachelgramlich/grocery-wizard/issues/354): household-only access, **Google allowlist**, **Notion secrets server-side**, and **GitHub feedback inbox** (label `user-feedback-inbox`). Triage inbox issues with follow-up [#355](https://github.com/rachelgramlich/grocery-wizard/issues/355).
+Locked requirements for [#354](https://github.com/rachelgramlich/grocery-hub/issues/354): household-only access, **Google allowlist**, **Notion secrets server-side**, and **GitHub feedback inbox** (label `user-feedback-inbox`). Triage inbox issues with follow-up [#355](https://github.com/rachelgramlich/grocery-hub/issues/355).
 
 ## Architecture
 
@@ -26,7 +26,7 @@ flowchart LR
 
 ### 2. Streamlit Community Cloud app
 
-1. Connect the GitHub repo; set **Main file path** to `src/grocery_wizard/ui/app.py`.
+1. Connect the GitHub repo; set **Main file path** to `src/grocery_hub/ui/app.py`.
 2. Set the app to **Private** and optionally add viewers in Cloud sharing (belt-and-suspenders with in-app allowlist).
 3. Paste **Secrets** (TOML) — same shape as committed `secrets.toml.example` at repo root:
 
@@ -34,9 +34,9 @@ flowchart LR
 | --- | --- |
 | `NOTION_*` | Same as `.env.example` |
 | `[auth]` block | Google OIDC (`client_id`, `client_secret`, `redirect_uri`, `cookie_secret`, `server_metadata_url`) |
-| `GROCERY_WIZARD_REQUIRE_AUTH` | `true` |
-| `GROCERY_WIZARD_AUTH_EMAIL_ALLOWLIST` | Comma-separated household Google emails |
-| `GITHUB_FEEDBACK_REPOSITORY` | `rachelgramlich/grocery-wizard` (default if omitted) |
+| `GROCERY_HUB_REQUIRE_AUTH` | `true` |
+| `GROCERY_HUB_AUTH_EMAIL_ALLOWLIST` | Comma-separated household Google emails |
+| `GITHUB_FEEDBACK_REPOSITORY` | `rachelgramlich/grocery-hub` (default if omitted) |
 | `GITHUB_FEEDBACK_TOKEN` | Fine-grained PAT, **issues:write** on this repo only |
 
 Never bake tokens into the Docker image or commit them to git.
@@ -47,15 +47,15 @@ Never bake tokens into the Docker image or commit them to git.
 
 ### 3. GitHub feedback PAT (fine-grained, production)
 
-Production **Send feedback** must use a **fine-grained** personal access token scoped to this repo—not a broad classic token or a copy of `gh auth token` from local dev ([#360](https://github.com/rachelgramlich/grocery-wizard/issues/360)).
+Production **Send feedback** must use a **fine-grained** personal access token scoped to this repo—not a broad classic token or a copy of `gh auth token` from local dev ([#360](https://github.com/rachelgramlich/grocery-hub/issues/360)).
 
 #### Create the token (GitHub)
 
 1. GitHub → **Settings** → **Developer settings** → **Personal access tokens** → **Fine-grained tokens** → **Generate new token**.
 2. **Resource owner:** your account (or org that owns the repo).
-3. **Repository access:** **Only select repositories** → `rachelgramlich/grocery-wizard`.
+3. **Repository access:** **Only select repositories** → `rachelgramlich/grocery-hub`.
 4. **Permissions** (repository): **Issues** → **Read and write** only. Leave Contents, Actions, and other permissions at **No access**.
-5. Set a short **expiration** (e.g. 90 days) and a note such as `grocery-wizard Streamlit feedback`.
+5. Set a short **expiration** (e.g. 90 days) and a note such as `grocery-hub Streamlit feedback`.
 6. **Generate** and copy the token once (`github_pat_…`). You cannot view it again.
 
 Do **not** commit the token or bake it into a Docker image.
@@ -67,14 +67,14 @@ Do **not** commit the token or bake it into a Docker image.
 
    `GITHUB_FEEDBACK_TOKEN = "github_pat_…"`
 
-   Keep `GITHUB_FEEDBACK_REPOSITORY = "rachelgramlich/grocery-wizard"` unless you intentionally file elsewhere.
+   Keep `GITHUB_FEEDBACK_REPOSITORY = "rachelgramlich/grocery-hub"` unless you intentionally file elsewhere.
 3. **Save** → **Reboot app** (Secrets changes do not apply until reboot).
 
 #### Verify
 
 1. Sign in on the production URL (allowlisted Google account).
 2. Expand **Send feedback**, submit a short test note, confirm success toast.
-3. On This Mac: `gh issue list --label user-feedback-inbox --state open --repo rachelgramlich/grocery-wizard` — confirm the new inbox issue.
+3. On This Mac: `gh issue list --label user-feedback-inbox --state open --repo rachelgramlich/grocery-hub` — confirm the new inbox issue.
 
 #### Revoke old tokens
 
@@ -84,7 +84,7 @@ If you ever pasted a **classic** PAT, a **`gh auth token`**, or an over-scoped t
 2. **Revoke** the old token(s) used for Cloud feedback.
 3. Local dev can keep using `gh auth login` for issues/PRs; that CLI token must **not** be copied into Streamlit Secrets.
 
-Submitted notes open issues labeled **`user-feedback-inbox`**. Promote to backlog label `grocery-wizard` after triage ([#355](https://github.com/rachelgramlich/grocery-wizard/issues/355)).
+Submitted notes open issues labeled **`user-feedback-inbox`**. Promote to backlog label `grocery-hub` after triage ([#355](https://github.com/rachelgramlich/grocery-hub/issues/355)).
 
 ### Secret rotation (no git commits)
 
@@ -103,7 +103,7 @@ If **Send feedback** fails after rotation, check **Manage app → Logs** for con
 
 | Setting | Local (`just grocery-ui`) | Household Cloud |
 | --- | --- | --- |
-| `GROCERY_WIZARD_REQUIRE_AUTH` | `false` in `.streamlit/secrets.toml` | `true` |
+| `GROCERY_HUB_REQUIRE_AUTH` | `false` in `.streamlit/secrets.toml` | `true` |
 | Feedback | Always GitHub (`user-feedback-inbox`) | Same |
 | Feedback triage | #355 inbox command or `gh issue list --label user-feedback-inbox` | Same |
 
@@ -118,9 +118,9 @@ If **Send feedback** fails after rotation, check **Manage app → Logs** for con
 ### Streamlit Community Cloud — deploy UI
 
 - **Create app** → **“Yup, I have an app”** (do **not** use the template / “create a repository” path).
-- Repository: **`rachelgramlich/grocery-wizard`**, branch **`main`**, file **`src/grocery_wizard/ui/app.py`**.
+- Repository: **`rachelgramlich/grocery-hub`**, branch **`main`**, file **`src/grocery_hub/ui/app.py`**.
 - Private repo: grant Community Cloud access to **private** repos in account settings, or **Paste GitHub URL** to the entrypoint file on GitHub.
-- **Custom subdomain** (e.g. `grocerywizard.streamlit.app`) only changes the public URL — not a new GitHub repo.
+- **Custom subdomain** (e.g. `groceryhub.streamlit.app`) only changes the public URL — not a new GitHub repo.
 
 ### Google OAuth — production redirect
 
@@ -135,11 +135,11 @@ On the OAuth **consent screen**, add authorized domain **`streamlit.app`**. Keep
 
 | Phase | Topic | Tracking |
 | --- | --- | --- |
-| **4** | Fine-grained **GitHub feedback PAT** in Cloud Secrets + rotation runbook | [#360](https://github.com/rachelgramlich/grocery-wizard/issues/360) (this doc, §3 and **Secret rotation**) |
-| **5** | Triage **`user-feedback-inbox`** → **`grocery-wizard`** backlog | [#355](https://github.com/rachelgramlich/grocery-wizard/issues/355) (`/promote-feedback-inbox` or similar) |
+| **4** | Fine-grained **GitHub feedback PAT** in Cloud Secrets + rotation runbook | [#360](https://github.com/rachelgramlich/grocery-hub/issues/360) (this doc, §3 and **Secret rotation**) |
+| **5** | Triage **`user-feedback-inbox`** → **`grocery-hub`** backlog | [#355](https://github.com/rachelgramlich/grocery-hub/issues/355) (`/promote-feedback-inbox` or similar) |
 | **6** | Optional **NYT Cooking** sync on hosted app (`NYT_S_COOKIE`, `NYT_REGI_ID` in Cloud Secrets; cookies expire) | GitHub issue (backlog) |
 
-List inbox issues: `gh issue list --label user-feedback-inbox --state open --repo rachelgramlich/grocery-wizard`
+List inbox issues: `gh issue list --label user-feedback-inbox --state open --repo rachelgramlich/grocery-hub`
 
 ## Troubleshooting
 
@@ -152,11 +152,11 @@ List inbox issues: `gh issue list --label user-feedback-inbox --state open --rep
 | Feedback `GITHUB_FEEDBACK_TOKEN` | Missing or revoked token | Update Cloud Secrets; prefer fine-grained PAT (phase 4) |
 | **`ValidationError` after reboot** | Cloud Secrets missing/invalid TOML, or bool/env mismatch | **Manage app → Logs** for field names. Re-paste Secrets (TOML, not `.env` syntax). Need all `NOTION_*`, flat keys + `[auth]`. Save → Reboot. |
 | Notion key missing locally | No `secrets.toml` | Copy `secrets.toml.example` → `secrets.toml`; `just link-secrets` |
-| App auth OK but “not authorized” | Email not on allowlist | `GROCERY_WIZARD_AUTH_EMAIL_ALLOWLIST` in secrets |
-| **My apps** title **“Sign in – Google Accounts”** | SCC profile tile uses **OAuth page title + screenshot**; Settings has **App URL** only (no display-name field) | Expected for **auth-gated** apps. Ignore for household use, or share **`grocerywizard.streamlit.app`** directly. Optional: custom subdomain in Settings → General (still won’t fix Google title on the tile). |
+| App auth OK but “not authorized” | Email not on allowlist | `GROCERY_HUB_AUTH_EMAIL_ALLOWLIST` in secrets |
+| **My apps** title **“Sign in – Google Accounts”** | SCC profile tile uses **OAuth page title + screenshot**; Settings has **App URL** only (no display-name field) | Expected for **auth-gated** apps. Ignore for household use, or share **`groceryhub.streamlit.app`** directly. Optional: custom subdomain in Settings → General (still won’t fix Google title on the tile). |
 | **My apps** shows error screenshot + sidebar (`app`, `add recipe`, …) | Crash on startup **or** Streamlit treating `pages/` as multipage | Fix **ValidationError** in logs (Secrets TOML). On `main`, UI modules live under `ui/views/` (not `ui/pages/`) so Cloud does not register extra pages. |
 | No README blurb on profile card | SCC card is mostly **name + screenshot**; README summary helps link previews and GitHub | Merge README on `main`, fix Secrets, reboot; optional **public** app for gallery-style listings |
 
 ## Staging Notion
 
-Resolved ([#356](https://github.com/rachelgramlich/grocery-wizard/issues/356)) — **no second Streamlit Cloud app**. Staging for humans, agents, and read-only CI uses **`[GW CI]`** Notion copies ([`docs/operations/notion-ci-setup.md`](notion-ci-setup.md); live checks [#426](https://github.com/rachelgramlich/grocery-wizard/issues/426)). Production Cloud keeps one `[GW]` integration; revert test writes per `AGENTS.md` UAT rules.
+Resolved ([#356](https://github.com/rachelgramlich/grocery-hub/issues/356)) — **no second Streamlit Cloud app**. Staging for humans, agents, and read-only CI uses **`[GW CI]`** Notion copies ([`docs/operations/notion-ci-setup.md`](notion-ci-setup.md); live checks [#426](https://github.com/rachelgramlich/grocery-hub/issues/426)). Production Cloud keeps one `[GW]` integration; revert test writes per `AGENTS.md` UAT rules.

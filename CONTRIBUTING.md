@@ -193,13 +193,13 @@ Imports inside function bodies are only acceptable to break true circular import
 ```python
 # Bad — use at top-level instead
 def format_sync_message(summary: SyncSummary) -> str:
-    from src.grocery_wizard.ingredients.sync import format_sync_summary
+    from src.grocery_hub.ingredients.sync import format_sync_summary
 
     return format_sync_summary(summary)
 
 
 # Good
-from src.grocery_wizard.ingredients.sync import format_sync_summary
+from src.grocery_hub.ingredients.sync import format_sync_summary
 
 
 def format_sync_message(summary: SyncSummary) -> str:
@@ -214,18 +214,18 @@ Leading-underscore names are private to their module. If another module needs th
 
 ```python
 # Bad
-from src.grocery_wizard.recipes.scraper import _looks_fragmented
+from src.grocery_hub.recipes.scraper import _looks_fragmented
 
 # Good — after promoting to public in scraper.py
-from src.grocery_wizard.recipes.scraper import looks_fragmented
+from src.grocery_hub.recipes.scraper import looks_fragmented
 ```
 
 ---
 
 ## Path anchors
 
-- **Package and repo roots:** `src/grocery_wizard/paths.py` (`REPO_ROOT`, `PACKAGE_ROOT`, `UI_APP_PATH`, …).
-- **Tests:** `tests/repo_paths.py` re-exports those anchors and adds `package_module_source()`; UI tests use `tests/src/grocery_wizard/ui/ui_source.py`.
+- **Package and repo roots:** `src/grocery_hub/paths.py` (`REPO_ROOT`, `PACKAGE_ROOT`, `UI_APP_PATH`, …).
+- **Tests:** `tests/repo_paths.py` re-exports those anchors and adds `package_module_source()`; UI tests use `tests/src/grocery_hub/ui/ui_source.py`.
 
 Do not add new `Path(__file__).parents[N]` literals in product or test code unless bootstrapping `ui/app.py` before `sys.path` is ready. Document new shared constants in [`docs/architecture/path-anchors.md`](docs/architecture/path-anchors.md).
 
@@ -332,11 +332,11 @@ with pytest.raises(MyError, match="message"):
 
 ### UI source paths
 
-Streamlit UI regression tests read concatenated sources via `tests/src/grocery_wizard/ui/ui_source.py`. Import `APP_PATH`, `UI_ROOT`, `ui_source()`, and `pantry_page_source()` from that module (or `from ui_source import …` inside `tests/src/grocery_wizard/ui/`). UI page/block/control IDs live in `docs/ui/ui-map.md` and `src/grocery_wizard/ui/ids.py`. Do not duplicate `Path(...)/app.py` literals across test files.
+Streamlit UI regression tests read concatenated sources via `tests/src/grocery_hub/ui/ui_source.py`. Import `APP_PATH`, `UI_ROOT`, `ui_source()`, and `pantry_page_source()` from that module (or `from ui_source import …` inside `tests/src/grocery_hub/ui/`). UI page/block/control IDs live in `docs/ui/ui-map.md` and `src/grocery_hub/ui/ids.py`. Do not duplicate `Path(...)/app.py` literals across test files.
 
 ### Grocery list quality
 
-Weekly export regressions use **golden weeks** in `tests/fixtures/golden_grocery_weeks/` — run `just golden-grocery`. List-bug fixes should add or extend a fixture, not only a one-line normalize test. Sign-off flow: **`docs/quality/grocery-quality.md`** and the **`/grocery-quality-review`** slash command. CI runs golden weeks and `just smoke-ui` with mocked Notion; live read-only Notion integration runs on PRs to `main` when **`NOTION_CI_API_KEY`** and the four **`NOTION_CI_*_DATABASE_ID`** GitHub Actions secrets exist (skips cleanly otherwise) — see [#426](https://github.com/rachelgramlich/grocery-wizard/issues/426).
+Weekly export regressions use **golden weeks** in `tests/fixtures/golden_grocery_weeks/` — run `just golden-grocery`. List-bug fixes should add or extend a fixture, not only a one-line normalize test. Sign-off flow: **`docs/quality/grocery-quality.md`** and the **`/grocery-quality-review`** slash command. CI runs golden weeks and `just smoke-ui` with mocked Notion; live read-only Notion integration runs on PRs to `main` when **`NOTION_CI_API_KEY`** and the four **`NOTION_CI_*_DATABASE_ID`** GitHub Actions secrets exist (skips cleanly otherwise) — see [#426](https://github.com/rachelgramlich/grocery-hub/issues/426).
 
 ### String literals in tests
 
@@ -355,7 +355,7 @@ text = "line one\nline two\nline three"
 ## File Organization
 
 ```
-src/grocery_wizard/
+src/grocery_hub/
 ├── cli/          # removed-command hints only — no business logic
 ├── config/       # Config dataclass + data files (pantry, aisles, recurring)
 ├── dev/          # Reserved package namespace (no CLI yet; use root scripts/ and `just` recipes)

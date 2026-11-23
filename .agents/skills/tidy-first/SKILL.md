@@ -36,7 +36,7 @@ Use this skill during **normal implementation** — features, bugs, refactors th
 
 **Repo patterns (prefer when deduping during tidy):**
 
-- UI test paths → `tests/src/grocery_wizard/ui/ui_source.py`
+- UI test paths → `tests/src/grocery_hub/ui/ui_source.py`
 - Theme static CSS path → `APP_THEME_STATIC_CSS` in `theme.py`
 - Ingredient table regex → `ingredients/_patterns.py`
 - CLI deprecation copy → shared constants in `cli/` shims

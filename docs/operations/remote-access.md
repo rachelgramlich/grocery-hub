@@ -1,11 +1,11 @@
 # Remote mobile access (research)
 
-Grocery Wizard runs as a **Streamlit** app (`just grocery-ui`) with **Notion** as the data store. Credentials live in `.env` (`NOTION_API_KEY`, database IDs).
+Grocery Hub runs as a **Streamlit** app (`just grocery-ui`) with **Notion** as the data store. Credentials live in `.env` (`NOTION_API_KEY`, database IDs).
 
 | Where the app runs | Who can use it |
 | --- | --- |
 | **Local** (`just grocery-ui`, default localhost) | Anyone who can reach the URL — **no in-app login** (typical: only you on the Mac). |
-| **Household deploy** (Streamlit Community Cloud, [#354](https://github.com/rachelgramlich/grocery-wizard/issues/354)) | **Google sign-in** + email allowlist (`GROCERY_WIZARD_REQUIRE_AUTH`, `GROCERY_WIZARD_AUTH_EMAIL_ALLOWLIST`) — see [household-deploy.md](household-deploy.md) and `access_gate.py`. |
+| **Household deploy** (Streamlit Community Cloud, [#354](https://github.com/rachelgramlich/grocery-hub/issues/354)) | **Google sign-in** + email allowlist (`GROCERY_HUB_REQUIRE_AUTH`, `GROCERY_HUB_AUTH_EMAIL_ALLOWLIST`) — see [household-deploy.md](household-deploy.md) and `access_gate.py`. |
 
 This document compares ways to use the UI on a phone **outside home Wi‑Fi**, records a **household decision**, and points at remaining backlog work.
 
@@ -14,7 +14,7 @@ This document compares ways to use the UI on a phone **outside home Wi‑Fi**, r
 | Use case | Approach |
 | --- | --- |
 | **Default** | Run `just grocery-ui` on the Mac when it is on; use the **CLI** when the UI is not running. Optional: phone on **same Wi‑Fi** while the Mac is up (`just grocery-ui -- --server.address=0.0.0.0` if needed). |
-| **Phone on cellular / anytime** | **Household deploy** on Streamlit Community Cloud ([#354](https://github.com/rachelgramlich/grocery-wizard/issues/354)) — see [household-deploy.md](household-deploy.md). Not tunnel-to-Mac—the laptop is often off. |
+| **Phone on cellular / anytime** | **Household deploy** on Streamlit Community Cloud ([#354](https://github.com/rachelgramlich/grocery-hub/issues/354)) — see [household-deploy.md](household-deploy.md). Not tunnel-to-Mac—the laptop is often off. |
 
 No committed Just recipes or config exist for tunnels or LAN bind; pass Streamlit flags yourself if you ever experiment locally.
 
@@ -65,7 +65,7 @@ Deploy the same app to a PaaS (Railway, Fly.io, Render, a small VPS, etc.) or **
 
 **Local:** use **local Streamlit + CLI** when the Mac is on; do **not** invest in tunnel-to-Mac automation in this repo.
 
-**Remote / phone on cellular:** use the **household deploy runbook** ([#354](https://github.com/rachelgramlich/grocery-wizard/issues/354), [docs/operations/household-deploy.md](household-deploy.md)). Treat Cloudflare Tunnel-to-Mac as a personal ops note only, not a product path.
+**Remote / phone on cellular:** use the **household deploy runbook** ([#354](https://github.com/rachelgramlich/grocery-hub/issues/354), [docs/operations/household-deploy.md](household-deploy.md)). Treat Cloudflare Tunnel-to-Mac as a personal ops note only, not a product path.
 
 **Defer:** Native app; Mac tunnel runbook (#137 — closed as not planned).
 
@@ -73,15 +73,15 @@ Deploy the same app to a PaaS (Railway, Fly.io, Render, a small VPS, etc.) or **
 
 | Phase | Backlog issue | Topic |
 | --- | --- | --- |
-| — | ~~[#137](https://github.com/rachelgramlich/grocery-wizard/issues/137)~~ | Mac tunnel runbook — **not planned** (Mac often off) |
-| — | ~~[#138](https://github.com/rachelgramlich/grocery-wizard/issues/138)~~ | Superseded by #354 |
-| — | ~~[#139](https://github.com/rachelgramlich/grocery-wizard/issues/139)~~ | Superseded by #354 (Google `st.login` + allowlist) |
-| Done | ~~[#354](https://github.com/rachelgramlich/grocery-wizard/issues/354)~~ | SCC deploy, Google allowlist, GitHub feedback inbox |
-| Deferred | [#140](https://github.com/rachelgramlich/grocery-wizard/issues/140) | Mobile UX: Add to Home Screen hints, optional PWA meta, touch layout pass |
+| — | ~~[#137](https://github.com/rachelgramlich/grocery-hub/issues/137)~~ | Mac tunnel runbook — **not planned** (Mac often off) |
+| — | ~~[#138](https://github.com/rachelgramlich/grocery-hub/issues/138)~~ | Superseded by #354 |
+| — | ~~[#139](https://github.com/rachelgramlich/grocery-hub/issues/139)~~ | Superseded by #354 (Google `st.login` + allowlist) |
+| Done | ~~[#354](https://github.com/rachelgramlich/grocery-hub/issues/354)~~ | SCC deploy, Google allowlist, GitHub feedback inbox |
+| Deferred | [#140](https://github.com/rachelgramlich/grocery-hub/issues/140) | Mobile UX: Add to Home Screen hints, optional PWA meta, touch layout pass |
 
 ## Security checklist (any public URL)
 
-- [ ] Gate the URL — for SCC, enable **in-app auth** (`GROCERY_WIZARD_REQUIRE_AUTH` + allowlist) and keep the Cloud app **Private**; optional alternative is Cloudflare Access in front of a self-hosted URL.
+- [ ] Gate the URL — for SCC, enable **in-app auth** (`GROCERY_HUB_REQUIRE_AUTH` + allowlist) and keep the Cloud app **Private**; optional alternative is Cloudflare Access in front of a self-hosted URL.
 - [ ] Keep `.env` / platform secrets out of git; rotate `NOTION_API_KEY` if it was ever leaked.
 - [ ] Notion integration should only have access to the databases you intend.
 - [ ] Optional: NYT cookies in `.env` are sensitive; same rules apply on a hosted machine.

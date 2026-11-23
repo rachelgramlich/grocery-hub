@@ -2,11 +2,11 @@
 
 Filesystem paths are owned in two places so production code, tests, and docs do not diverge.
 
-## Production (`src/grocery_wizard/paths.py`)
+## Production (`src/grocery_hub/paths.py`)
 
 | Name | Points to |
 | --- | --- |
-| `PACKAGE_ROOT` | `src/grocery_wizard/` |
+| `PACKAGE_ROOT` | `src/grocery_hub/` |
 | `REPO_ROOT` | Repository root (parent of `src/`) |
 | `UI_APP_PATH` | Streamlit entry (`ui/app.py`) |
 | `GOLDEN_GROCERY_WEEKS_DIR` | `tests/fixtures/golden_grocery_weeks/` |
@@ -21,11 +21,11 @@ Use these instead of `Path(__file__).parents[N]` in new code.
 | Name | Role |
 | --- | --- |
 | `REPO_ROOT`, `SRC_PACKAGE_ROOT` | Re-exported from `paths` (package + repo) |
-| `UI_SRC_ROOT`, `UI_TEST_HELPERS` | UI tree under `tests/src/grocery_wizard/ui/` |
+| `UI_SRC_ROOT`, `UI_TEST_HELPERS` | UI tree under `tests/src/grocery_hub/ui/` |
 | `FIXTURES_DIR` | Shared pytest fixtures |
-| `package_module_source(rel)` | Read any file under `src/grocery_wizard/` as UTF-8 text |
+| `package_module_source(rel)` | Read any file under `src/grocery_hub/` as UTF-8 text |
 
-UI string-regression tests should use helpers in `tests/src/grocery_wizard/ui/ui_source.py` (`app_source`, `weekly_plan_source`, `apptest_from_app`, …) rather than path literals.
+UI string-regression tests should use helpers in `tests/src/grocery_hub/ui/ui_source.py` (`app_source`, `weekly_plan_source`, `apptest_from_app`, …) rather than path literals.
 
 ## Related constants (not in `paths.py`)
 

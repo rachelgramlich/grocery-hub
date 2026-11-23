@@ -1,0 +1,62 @@
+"""AppTest smoke: per-recipe review form submit builds the final grocery list (#237)."""
+
+from __future__ import annotations
+
+import pytest
+from ui_source import (
+    apptest_continue_to_meal_builder,
+    apptest_from_app,
+    apptest_rail_get_started,
+)
+
+from src.grocery_hub.ui.dev_jumps import DEV_JUMP_BUTTON_LABEL_PER_RECIPE_REVIEW
+from tests.notion_test_env import live_notion_smoke_enabled
+
+pytestmark = pytest.mark.skipif(
+    not live_notion_smoke_enabled(),
+    reason="Live Notion credentials required for AppTest smoke (not CI placeholders)",
+)
+
+
+def _enter_dev_mode(at) -> None:
+    continue_buttons = [b for b in at.button if b.label == "Continue"]
+    assert continue_buttons, "Weekly plan Continue missing"
+    continue_buttons[0].click().run(timeout=120)
+    apptest_rail_get_started(at, timeout=120)
+
+    change = [b for b in at.button if b.label == "Change how I started"]
+    assert change, "Change how I started missing"
+    change[0].click().run(timeout=120)
+
+    session_radio = [r for r in at.radio if r.label == "Weekly plan session"]
+    assert session_radio, "Weekly plan session radio missing"
+    dev_opt = next(o for o in session_radio[0].options if "Dev mode" in o)
+    session_radio[0].set_value(dev_opt).run(timeout=120)
+    apptest_continue_to_meal_builder(at, timeout=120)
+
+
+def test_per_recipe_review_form_submit_reaches_final_list(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Live Notion: dev jump → review form → Build final list → grocery result UI."""
+    monkeypatch.setenv("GROCERY_HUB_DEV_UI", "1")
+
+    at = apptest_from_app(timeout=120)
+    at.run(timeout=120)
+    _enter_dev_mode(at)
+
+    review_jump = [b for b in at.button if b.label == DEV_JUMP_BUTTON_LABEL_PER_RECIPE_REVIEW]
+    assert review_jump, "Dev jump Per-recipe review button missing"
+    review_jump[0].click().run(timeout=120)
+
+    assert at.text_area, "Expected per-recipe ingredient text areas"
+    edited = f"{(at.text_area[0].value or '').rstrip()}\n2 cups UNIQUE237SMOKE".strip()
+    at.text_area[0].set_value(edited)
+
+    submit = [b for b in at.button if b.label == "Build final list"]
+    assert submit, "Build final list form submit missing"
+    submit[0].click().run(timeout=120)
+
+    assert not at.exception, f"App exception: {at.exception}"
+    assert "grocery_result" in at.session_state
+    assert "grocery_per_recipe_review" not in at.session_state
+    grocery_areas = [t for t in at.text_area if t.key == "grocery_final_list"]
+    assert grocery_areas, "Final grocery list text area missing"

@@ -1,8 +1,8 @@
 # Weekly tab UX spec (Create weekly plan)
 
-Design for [#325](https://github.com/rachelgramlich/grocery-wizard/issues/325) and follow-up implementation issues. **Source of truth** for rail behavior, collapse rules, happy path, and copy goals on the `weekly` page.
+Design for [#325](https://github.com/rachelgramlich/grocery-hub/issues/325) and follow-up implementation issues. **Source of truth** for rail behavior, collapse rules, happy path, and copy goals on the `weekly` page.
 
-Related: closed [#209](https://github.com/rachelgramlich/grocery-wizard/issues/209) (labels, dev tools, partial collapse of meal builder). Block IDs remain in [`ui-map.md`](ui-map.md); this doc describes **user-facing** behavior.
+Related: closed [#209](https://github.com/rachelgramlich/grocery-hub/issues/209) (labels, dev tools, partial collapse of meal builder). Block IDs remain in [`ui-map.md`](ui-map.md); this doc describes **user-facing** behavior.
 
 ## Goals
 
@@ -117,13 +117,13 @@ Power-user paths use the **`Dev:`** prefix so they do not look like required hap
 
 | Concern | Files |
 |---------|--------|
-| Page orchestration | `src/grocery_wizard/ui/views/weekly_plan/flow.py` |
-| Start + meals | `src/grocery_wizard/ui/views/weekly_plan/plan_entry.py` |
-| Grocery + result | `src/grocery_wizard/ui/views/weekly_plan/grocery_list_ui.py` |
-| Per-recipe review | `src/grocery_wizard/ui/views/weekly_plan/recipe_review.py` |
-| Save / fingerprint | `src/grocery_wizard/ui/views/weekly_plan/state.py` |
-| Rail / step UI (new) | e.g. `src/grocery_wizard/ui/views/weekly_plan/step_ui.py` |
-| Dim / scroll CSS | `src/grocery_wizard/ui/static/app_theme.css` |
+| Page orchestration | `src/grocery_hub/ui/views/weekly_plan/flow.py` |
+| Start + meals | `src/grocery_hub/ui/views/weekly_plan/plan_entry.py` |
+| Grocery + result | `src/grocery_hub/ui/views/weekly_plan/grocery_list_ui.py` |
+| Per-recipe review | `src/grocery_hub/ui/views/weekly_plan/recipe_review.py` |
+| Save / fingerprint | `src/grocery_hub/ui/views/weekly_plan/state.py` |
+| Rail / step UI (new) | e.g. `src/grocery_hub/ui/views/weekly_plan/step_ui.py` |
+| Dim / scroll CSS | `src/grocery_hub/ui/static/app_theme.css` |
 
 ## Implementation split (GitHub)
 
@@ -131,10 +131,10 @@ Spec delivered in #325; implementation:
 
 | Order | Issue | Scope |
 |-------|-------|--------|
-| 1 | [#328](https://github.com/rachelgramlich/grocery-wizard/issues/328) | Step rail, block states, CSS |
-| 2 | [#329](https://github.com/rachelgramlich/grocery-wizard/issues/329) | Saved-plan entry, Notion save collapse |
-| 3 | [#330](https://github.com/rachelgramlich/grocery-wizard/issues/330) | Grocery stage layout, scroll, rail expand (main-path review) |
-| 4 | [#331](https://github.com/rachelgramlich/grocery-wizard/issues/331) | Copy pass (last) |
+| 1 | [#328](https://github.com/rachelgramlich/grocery-hub/issues/328) | Step rail, block states, CSS |
+| 2 | [#329](https://github.com/rachelgramlich/grocery-hub/issues/329) | Saved-plan entry, Notion save collapse |
+| 3 | [#330](https://github.com/rachelgramlich/grocery-hub/issues/330) | Grocery stage layout, scroll, rail expand (main-path review) |
+| 4 | [#331](https://github.com/rachelgramlich/grocery-hub/issues/331) | Copy pass (last) |
 
 Suggested PR order matches the table. Use `tidy-first` (**S** vs **B**) within each issue.
 

@@ -1,0 +1,617 @@
+"""Flow 0: Add recipe URLs to Notion."""
+
+from __future__ import annotations
+
+import sys
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+from src.grocery_hub.ingredients.sync import prepare_ingredients_for_notion
+from src.grocery_hub.integrations.notion import (
+    DatabaseSchema,
+    NotionFieldValues,
+    NotionRecipesDB,
+    normalize_recipe_name,
+)
+from src.grocery_hub.recipes.classify import classify_recipe
+from src.grocery_hub.recipes.prompts import confirm_no_default
+from src.grocery_hub.recipes.recipe_image_attach import attach_recipe_cover_image
+from src.grocery_hub.recipes.recipe_meal_plan_stats import (
+    filter_columns_for_recipe_classify,
+    is_meal_plan_tracking_column,
+)
+from src.grocery_hub.recipes.scraper import (
+    ScrapedRecipe,
+    ScrapeError,
+    ingredients_to_text,
+    scrape_recipe,
+)
+from src.grocery_hub.recipes.weeknight import DEFAULT_WEEKNIGHT_COLUMN
+from src.grocery_hub.shopping.grocery_list import recipe_title_from_url
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+
+@dataclass(frozen=True, slots=True)
+class PrefetchedCreateResult:
+    page_id: str
+    name: str
+    url: str
+    field_values: NotionFieldValues
+
+
+@dataclass(frozen=True, slots=True)
+class RecipeUrlPreview:
+    """Result of scraping/classifying one URL before Notion create (UI or CLI)."""
+
+    status: str  # duplicate | manual | ready
+    url: str
+    fields: NotionFieldValues | None = None
+    error: str | None = None
+    duplicate_name: str | None = None
+
+
+def ordered_recipe_field_names(schema: DatabaseSchema) -> list[str]:
+    names = [schema.name_column, schema.link_column]
+    if schema.ingredients_column:
+        names.append(schema.ingredients_column)
+    if schema.instructions_column:
+        names.append(schema.instructions_column)
+    names.extend(
+        col.name for col in schema.review_columns if not is_meal_plan_tracking_column(col.name)
+    )
+    return names
+
+
+def guess_recipe_name_from_url(url: str) -> str:
+    title = recipe_title_from_url(url)
+    return title.title() if title else ""
+
+
+def base_recipe_field_values(
+    schema: DatabaseSchema,
+    *,
+    url: str = "",
+    name: str = "",
+    ingredients: str = "",
+    inferred: NotionFieldValues | None = None,
+) -> NotionFieldValues:
+    fields: NotionFieldValues = {
+        schema.name_column: normalize_recipe_name(name) if name else name,
+        schema.link_column: url,
+    }
+    if schema.ingredients_column:
+        fields[schema.ingredients_column] = ingredients
+    if schema.instructions_column:
+        fields.setdefault(schema.instructions_column, "")
+    if inferred:
+        fields.update(inferred)
+    for col in schema.checkbox_columns:
+        fields.setdefault(col.name, False)
+    return fields
+
+
+def cleaned_scraped_ingredients_text(ingredients: list[str], url: str) -> str:
+    """Run scraped or API ingredient lines through the same parser used on Save."""
+    raw_text = ingredients_to_text(ingredients)
+    return prepare_ingredients_for_notion(raw_text, source_url=url) or raw_text
+
+
+def field_values_from_scrape(
+    schema: DatabaseSchema,
+    url: str,
+    scraped: ScrapedRecipe,
+) -> NotionFieldValues:
+    filter_columns = filter_columns_for_recipe_classify(schema.filter_columns)
+    weeknight_column = _weeknight_column_name(schema)
+    inferred = classify_recipe(
+        scraped.title,
+        scraped.ingredients,
+        filter_columns,
+        total_minutes=scraped.total_time_minutes,
+        weeknight_column=weeknight_column,
+    )
+    ingredients_text = (
+        cleaned_scraped_ingredients_text(scraped.ingredients, url)
+        if schema.ingredients_column
+        else ""
+    )
+    return base_recipe_field_values(
+        schema,
+        url=url,
+        name=scraped.title,
+        ingredients=ingredients_text,
+        inferred=inferred,
+    )
+
+
+def preview_recipe_urls(db: NotionRecipesDB, urls: list[str]) -> list[RecipeUrlPreview]:
+    """Scrape and classify URLs; detect duplicates and missing ingredients."""
+    schema = db.schema
+    previews: list[RecipeUrlPreview] = []
+
+    for url in urls:
+        existing = db.find_by_link(url)
+        if existing:
+            previews.append(
+                RecipeUrlPreview(
+                    status="duplicate",
+                    url=url,
+                    duplicate_name=existing.name,
+                ),
+            )
+            continue
+
+        try:
+            scraped = scrape_recipe(url)
+        except ScrapeError as exc:
+            previews.append(
+                RecipeUrlPreview(
+                    status="manual",
+                    url=url,
+                    error=str(exc),
+                    fields=base_recipe_field_values(
+                        schema,
+                        url=url,
+                        name=guess_recipe_name_from_url(url),
+                    ),
+                ),
+            )
+            continue
+
+        fields = field_values_from_scrape(schema, url, scraped)
+        if schema.ingredients_column and not scraped.ingredients:
+            previews.append(
+                RecipeUrlPreview(
+                    status="manual",
+                    url=url,
+                    error="No ingredients found on this page. Paste them below.",
+                    fields=fields,
+                ),
+            )
+        else:
+            previews.append(RecipeUrlPreview(status="ready", url=url, fields=fields))
+
+    return previews
+
+
+def add_prefetched_recipes(
+    db: NotionRecipesDB,
+    recipes: list[tuple[str, str, list[str]]],
+    *,
+    prompt: Callable[[str], str] | None = None,
+    confirm: Callable[[str], bool] | None = None,
+    select_option: Callable[[str, list[str], str | None], str | None] | None = None,
+    no_confirm: bool = False,
+    include_ingredients: bool = True,
+    mark_nyt_synced: bool = False,
+) -> list[PrefetchedCreateResult]:
+    """Add recipes with title, URL, and optional ingredients already fetched."""
+    prompt_fn = prompt or _default_prompt
+    confirm_fn = confirm or confirm_no_default
+    select_fn = select_option or _default_select_option
+
+    created: list[PrefetchedCreateResult] = []
+    schema = db.schema
+
+    for entry in recipes:
+        title, url, ingredients = entry[0], entry[1], entry[2]
+        total_minutes = entry[3] if len(entry) > 3 else None
+        url = url.strip()
+        if not url:
+            continue
+
+        existing = db.find_by_link(url)
+        if existing:
+            print(f"Skipping duplicate URL (already in Notion as '{existing.name}'): {url}")
+            continue
+
+        filter_columns = filter_columns_for_recipe_classify(schema.filter_columns)
+        weeknight_column = _weeknight_column_name(schema)
+        inferred = classify_recipe(
+            title,
+            ingredients,
+            filter_columns,
+            total_minutes=total_minutes,
+            weeknight_column=weeknight_column,
+        )
+
+        field_values: NotionFieldValues = {
+            schema.name_column: title,
+            schema.link_column: url,
+        }
+        if include_ingredients and schema.ingredients_column:
+            field_values[schema.ingredients_column] = cleaned_scraped_ingredients_text(
+                ingredients,
+                url,
+            )
+
+        field_values.update(inferred)
+
+        if mark_nyt_synced:
+            nyt_column = db.nyt_synced_column_name()
+            if nyt_column:
+                field_values[nyt_column] = True
+
+        if no_confirm:
+            reviewed = field_values
+            should_create = True
+        else:
+            reviewed = _review_fields(
+                db=db,
+                field_values=field_values,
+                prompt_fn=prompt_fn,
+                select_fn=select_fn,
+            )
+            if reviewed is None:
+                print("Skipped.")
+                continue
+            should_create = confirm_fn("Create this recipe in Notion?")
+
+        if not should_create:
+            print("Skipped.")
+            continue
+
+        if schema.ingredients_column and reviewed.get(schema.ingredients_column):
+            reviewed[schema.ingredients_column] = prepare_ingredients_for_notion(
+                reviewed[schema.ingredients_column],
+                source_url=url,
+            )
+
+        recipe = db.create_recipe(reviewed)
+        image_result = attach_recipe_cover_image(db, recipe.page_id, url)
+        if image_result.user_message:
+            print(image_result.user_message)
+        created.append(
+            PrefetchedCreateResult(
+                page_id=recipe.page_id,
+                name=recipe.name,
+                url=url,
+                field_values=reviewed,
+            ),
+        )
+        print(f"Created: {recipe.name}")
+
+    return created
+
+
+def add_recipes_from_urls(
+    db: NotionRecipesDB,
+    urls: list[str],
+    *,
+    prompt: Callable[[str], str] | None = None,
+    confirm: Callable[[str], bool] | None = None,
+    select_option: Callable[[str, list[str], str | None], str | None] | None = None,
+) -> list[str]:
+    """Add recipes for each URL. Returns list of created page IDs."""
+    prompt_fn = prompt or _default_prompt
+    confirm_fn = confirm or confirm_no_default
+    select_fn = select_option or _default_select_option
+
+    created_ids: list[str] = []
+    schema = db.schema
+
+    for raw_url in urls:
+        url = raw_url.strip()
+        if not url:
+            continue
+
+        existing = db.find_by_link(url)
+        if existing:
+            print(f"Skipping duplicate URL (already in Notion as '{existing.name}'): {url}")
+            continue
+
+        print(f"\nScraping: {url}")
+        try:
+            scraped = scrape_recipe(url)
+        except ScrapeError as exc:
+            print(f"Could not scrape recipe: {exc}")
+            continue
+
+        field_values = field_values_from_scrape(schema, url, scraped)
+
+        reviewed = _review_fields(
+            db=db,
+            field_values=field_values,
+            prompt_fn=prompt_fn,
+            select_fn=select_fn,
+        )
+        if reviewed is None:
+            print("Skipped.")
+            continue
+
+        if not confirm_fn("Create this recipe in Notion?"):
+            print("Skipped.")
+            continue
+
+        if schema.ingredients_column and reviewed.get(schema.ingredients_column):
+            reviewed[schema.ingredients_column] = prepare_ingredients_for_notion(
+                reviewed[schema.ingredients_column],
+                source_url=url,
+            )
+
+        recipe = db.create_recipe(reviewed)
+        image_result = attach_recipe_cover_image(db, recipe.page_id, url)
+        if image_result.user_message:
+            print(image_result.user_message)
+        created_ids.append(recipe.page_id)
+        print(f"Created: {recipe.name}")
+
+    return created_ids
+
+
+def _review_fields(
+    db: NotionRecipesDB,
+    field_values: NotionFieldValues,
+    prompt_fn: Callable[[str], str],
+    select_fn: Callable[[str, list[str], str | None], str | None],
+) -> NotionFieldValues | None:
+    schema = db.schema
+    reviewed: NotionFieldValues = {}
+
+    ordered_fields = [schema.name_column, schema.link_column]
+    if schema.ingredients_column:
+        ordered_fields.append(schema.ingredients_column)
+    if schema.instructions_column:
+        ordered_fields.append(schema.instructions_column)
+    ordered_fields.extend(
+        col.name for col in schema.review_columns if not is_meal_plan_tracking_column(col.name)
+    )
+
+    for field_name in ordered_fields:
+        if field_name not in field_values and field_name not in schema.all_columns:
+            continue
+
+        column = schema.all_columns.get(field_name)
+        current = field_values.get(field_name)
+
+        if column and column.type in ("select", "status"):
+            options = ["", *column.options]
+            current_str = current if isinstance(current, str) else None
+            picked = select_fn(field_name, options, current_str)
+            if picked is None:
+                return None
+            reviewed[field_name] = picked or None
+
+        elif column and column.type == "multi_select":
+            current_list = current if isinstance(current, list) else []
+            picked = _prompt_multi_select(field_name, column.options, current_list, prompt_fn)
+            if picked is None:
+                return None
+            reviewed[field_name] = picked
+
+        elif column and column.type == "checkbox":
+            if field_name == DEFAULT_WEEKNIGHT_COLUMN and isinstance(current, bool):
+                reviewed[field_name] = current
+                continue
+            picked = _prompt_checkbox(field_name, current, prompt_fn)
+            if picked is None:
+                return None
+            reviewed[field_name] = picked
+
+        elif field_name == schema.ingredients_column:
+            picked = _prompt_ingredients(field_name, current, prompt_fn)
+            if picked is None:
+                return None
+            reviewed[field_name] = picked
+
+        elif field_name == schema.instructions_column:
+            picked = _prompt_multiline_text(field_name, current, prompt_fn)
+            if picked is None:
+                return None
+            reviewed[field_name] = picked
+
+        else:
+            display = _format_value(current)
+            print(f"\n{field_name}:\n{display or '(empty)'}")
+            new_value = prompt_fn(f"  Enter value for {field_name} (Enter to keep): ")
+            reviewed[field_name] = new_value or current
+
+    return reviewed
+
+
+def _prompt_ingredients(
+    field_name: str,
+    current: object,
+    prompt_fn: Callable[[str], str],
+) -> str | None:
+    lines = _ingredients_to_lines(current)
+    print(f"\n{field_name}:")
+    if lines:
+        for index, line in enumerate(lines, start=1):
+            print(f"  {index}. {line}")
+    else:
+        print("  (empty)")
+
+    print("  Enter = keep, e = replace list, a = append lines, 0 = skip recipe")
+    choice = prompt_fn("  Choice: ").strip().lower()
+
+    if choice in ("", "k", "keep"):
+        return ingredients_to_text(lines)
+    if choice == "0":
+        return None
+    if choice == "e":
+        return _read_multiline_ingredients(prompt_fn, "replace")
+    if choice == "a":
+        appended = _read_multiline_ingredients(prompt_fn, "append")
+        combined = lines + _ingredients_to_lines(appended)
+        return ingredients_to_text(combined)
+
+    print("  Invalid choice, keeping current ingredients.")
+    return ingredients_to_text(lines)
+
+
+def _prompt_multiline_text(
+    field_name: str,
+    current: object,
+    prompt_fn: Callable[[str], str],
+) -> str | None:
+    display = _format_value(current)
+    print(f"\n{field_name}:\n{display or '(empty)'}")
+    print("  Enter = keep, e = replace, 0 = skip recipe")
+    choice = prompt_fn("  Choice: ").strip().lower()
+    if choice in ("", "k", "keep"):
+        return str(current or "")
+    if choice == "0":
+        return None
+    if choice == "e":
+        return _read_multiline_field(prompt_fn, field_name)
+    print("  Invalid choice, keeping current value.")
+    return str(current or "")
+
+
+def _read_multiline_field(prompt_fn: Callable[[str], str], field_name: str) -> str:
+    print(f"  Paste {field_name} (one line per step, empty line to finish):")
+    lines: list[str] = []
+    while True:
+        line = prompt_fn("")
+        if not line.strip():
+            break
+        lines.append(line.strip())
+    return "\n".join(lines)
+
+
+def _read_multiline_ingredients(prompt_fn: Callable[[str], str], mode: str) -> str:
+    print(f"  Paste ingredients to {mode} (one per line, empty line to finish):")
+    lines: list[str] = []
+    while True:
+        line = prompt_fn("")
+        if not line.strip():
+            break
+        lines.append(line.strip())
+    return ingredients_to_text(lines)
+
+
+def _ingredients_to_lines(value: object) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    text = str(value).strip()
+    if not text:
+        return []
+    return [line.strip() for line in text.splitlines() if line.strip()]
+
+
+def _prompt_multi_select(
+    field_name: str,
+    options: list[str],
+    current: list[str],
+    prompt_fn: Callable[[str], str],
+) -> list[str] | None:
+    print(f"\n{field_name}: {', '.join(current) or '(empty)'}")
+    if options:
+        print("  Options:")
+        for i, option in enumerate(options, start=1):
+            marker = " *" if option in current else ""
+            print(f"    {i}. {option}{marker}")
+    print("  Enter comma-separated numbers or names (Enter to keep, 0 to clear):")
+
+    while True:
+        choice = prompt_fn("  Choice: ").strip()
+        if not choice:
+            return current
+        if choice == "0":
+            return []
+        if choice.isdigit() and int(choice) == 0:
+            return []
+
+        picked: list[str] = []
+        for raw_part in choice.split(","):
+            part = raw_part.strip()
+            if not part:
+                continue
+            if part.isdigit():
+                index = int(part)
+                if 1 <= index <= len(options):
+                    picked.append(options[index - 1])
+                    continue
+            if part in options:
+                picked.append(part)
+                continue
+            print("  Invalid choice, try again.")
+            picked = []
+            break
+
+        if picked:
+            return list(dict.fromkeys(picked))
+
+
+def _prompt_checkbox(
+    field_name: str,
+    current: object,
+    prompt_fn: Callable[[str], str],
+) -> bool | None:
+    current_label = "yes" if current else "no" if current is False else "(unset)"
+    print(f"\n{field_name}: {current_label}")
+
+    while True:
+        choice = prompt_fn("  Set to yes/no? (y/n, Enter to keep): ").strip().lower()
+        if not choice:
+            return bool(current) if current is not None else False
+        if choice in ("y", "yes"):
+            return True
+        if choice in ("n", "no"):
+            return False
+        print("  Enter y, n, or Enter to keep.")
+
+
+def _format_value(value: object) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, list):
+        return ", ".join(str(v) for v in value)
+    return str(value)
+
+
+def _weeknight_column_name(schema: DatabaseSchema) -> str | None:
+    if DEFAULT_WEEKNIGHT_COLUMN in schema.all_columns:
+        return DEFAULT_WEEKNIGHT_COLUMN
+    return None
+
+
+def _default_prompt(message: str) -> str:
+    return input(message)
+
+
+def _default_select_option(field_name: str, options: list[str], current: str | None) -> str | None:
+    print(f"\n{field_name}: {_format_value(current) or '(empty)'}")
+    print("  Options:")
+    for i, option in enumerate(options, start=1):
+        label = option or "(blank)"
+        marker = " *" if option and option == current else ""
+        if not option and not current:
+            marker = " *"
+        print(f"    {i}. {label}{marker}")
+    print("  0. Skip this recipe")
+
+    while True:
+        choice = input("  Choice: ").strip()
+        if choice == "0":
+            return None
+        if not choice and current is not None:
+            return current
+        if not choice:
+            return ""
+        if choice.isdigit():
+            index = int(choice)
+            if 1 <= index <= len(options):
+                return options[index - 1]
+        if choice in options:
+            return choice
+        print("  Invalid choice, try again.")
+
+
+def read_urls_from_stdin() -> list[str]:
+    print("Paste recipe URL(s), one per line. Empty line to finish:")
+    urls: list[str] = []
+    while True:
+        line = sys.stdin.readline()
+        if not line:
+            break
+        line = line.strip()
+        if not line:
+            break
+        urls.append(line)
+    return urls

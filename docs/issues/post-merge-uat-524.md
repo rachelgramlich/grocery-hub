@@ -4,8 +4,8 @@ Run this sign-off procedure **once on `main`** after **everything in the merge c
 
 **Scope today:**
 
-1. **Architecture stack (Tiers B–E):** [#519](https://github.com/rachelgramlich/grocery-wizard/pull/519) → [#520](https://github.com/rachelgramlich/grocery-wizard/pull/520) → [#522](https://github.com/rachelgramlich/grocery-wizard/pull/522) → [#523](https://github.com/rachelgramlich/grocery-wizard/pull/523)
-2. **Tidy stack (structure-only, stacked on the architecture tip):** [#525](https://github.com/rachelgramlich/grocery-wizard/pull/525) → [#526](https://github.com/rachelgramlich/grocery-wizard/pull/526) → [#527](https://github.com/rachelgramlich/grocery-wizard/pull/527), plus **any further `chore(tidy):` PRs** stacked above #527 before calling UAT done.
+1. **Architecture stack (Tiers B–E):** [#519](https://github.com/rachelgramlich/grocery-hub/pull/519) → [#520](https://github.com/rachelgramlich/grocery-hub/pull/520) → [#522](https://github.com/rachelgramlich/grocery-hub/pull/522) → [#523](https://github.com/rachelgramlich/grocery-hub/pull/523)
+2. **Tidy stack (structure-only, stacked on the architecture tip):** [#525](https://github.com/rachelgramlich/grocery-hub/pull/525) → [#526](https://github.com/rachelgramlich/grocery-hub/pull/526) → [#527](https://github.com/rachelgramlich/grocery-hub/pull/527), plus **any further `chore(tidy):` PRs** stacked above #527 before calling UAT done.
 
 Intended behavior: **no intentional behavior change** (path dedupe, guards, docs, lint rules). **Tier C** (grocery build) and **Tier D** (Notion layout) still warrant extra attention in smoke.
 
@@ -23,7 +23,7 @@ Mark each row when merged to `main`:
 | #523 | Tier E | low-medium | feedback → `integrations/`, `recipes/prompts`, removed `lib/` |
 | #525 | tidy | low | `paths.py`, test `ui_source` / `repo_paths`, deduped constants |
 | #526 | tidy | low | guards (CLI, NYT, feedback), `pyproject` Ruff rules, `docs/architecture/path-anchors.md` |
-| [#527](https://github.com/rachelgramlich/grocery-wizard/pull/527) | tidy | low-medium | Ruff **BLE**, `integrations/notion_io_errors.py`, narrowed Notion/HTTP `except` at boundaries, UI cache/views |
+| [#527](https://github.com/rachelgramlich/grocery-hub/pull/527) | tidy | low-medium | Ruff **BLE**, `integrations/notion_io_errors.py`, narrowed Notion/HTTP `except` at boundaries, UI cache/views |
 | *(add rows)* | tidy | — | next PR stacked on #527 |
 
 **UAT starts when:** every checked-in row above is merged (or you explicitly drop a row and note why in a comment on this issue).
@@ -37,7 +37,7 @@ Mark each row when merged to `main`:
 - [ ] All PRs in the **merge checklist** are on `main`.
 - [ ] `git pull origin main` and note SHA.
 - [ ] `just setup` if deps or `pyproject.toml` changed (#526+).
-- [ ] Record date, machine, and Notion mode: **prod** (`.env`) vs **CI** (`NOTION_CI_*` / `GROCERY_WIZARD_NOTION_CI_LIVE=1`).
+- [ ] Record date, machine, and Notion mode: **prod** (`.env`) vs **CI** (`NOTION_CI_*` / `GROCERY_HUB_NOTION_CI_LIVE=1`).
 
 ### 1. Automated gate (required)
 
@@ -66,31 +66,31 @@ just smoke-ui       # holistic AppTest smoke
 **Tidy-focused pytest spot checks** (if golden/smoke look wrong after #525–#527):
 
 ```bash
-uv run pytest tests/src/grocery_wizard/ui/test_app_notion_clear_imports.py -q
-uv run pytest tests/src/grocery_wizard/ui/test_notion_cache.py -q
-uv run pytest tests/src/grocery_wizard/ui/test_feedback_ui.py -q
-uv run pytest tests/src/grocery_wizard/integrations/test_nyt_cooking.py -q
-uv run pytest tests/src/grocery_wizard/ui/test_browse_logic.py -q
+uv run pytest tests/src/grocery_hub/ui/test_app_notion_clear_imports.py -q
+uv run pytest tests/src/grocery_hub/ui/test_notion_cache.py -q
+uv run pytest tests/src/grocery_hub/ui/test_feedback_ui.py -q
+uv run pytest tests/src/grocery_hub/integrations/test_nyt_cooking.py -q
+uv run pytest tests/src/grocery_hub/ui/test_browse_logic.py -q
 ```
 
 ### 2. Import / path sanity (required, quick)
 
 ```bash
 PYTHONPATH=src uv run python -c "
-from grocery_wizard import paths
-from grocery_wizard.paths import REPO_ROOT, UI_APP_PATH
-from grocery_wizard.integrations.notion import NotionRecipesDB, Recipe
-from grocery_wizard.integrations.notion_table import NotionDatabase
-from grocery_wizard.integrations.feedback_submit import submit_feedback
-from grocery_wizard.shopping.weekly_grocery_build import build_grocery_result_payload
-from grocery_wizard.ui.components.loading import loading_indicator
-assert paths.PACKAGE_ROOT.name == 'grocery_wizard'
+from grocery_hub import paths
+from grocery_hub.paths import REPO_ROOT, UI_APP_PATH
+from grocery_hub.integrations.notion import NotionRecipesDB, Recipe
+from grocery_hub.integrations.notion_table import NotionDatabase
+from grocery_hub.integrations.feedback_submit import submit_feedback
+from grocery_hub.shopping.weekly_grocery_build import build_grocery_result_payload
+from grocery_hub.ui.components.loading import loading_indicator
+assert paths.PACKAGE_ROOT.name == 'grocery_hub'
 print('import ok', UI_APP_PATH)
 "
-rg 'grocery_wizard\\.lib' src tests || true   # expect no product imports under src/
+rg 'grocery_hub\\.lib' src tests || true   # expect no product imports under src/
 ```
 
-**Pass:** `import ok` and paths resolve; no stray `grocery_wizard.lib` under `src/`.
+**Pass:** `import ok` and paths resolve; no stray `grocery_hub.lib` under `src/`.
 
 Optional doc skim: `docs/architecture/path-anchors.md` (#526).
 
@@ -99,7 +99,7 @@ Optional doc skim: `docs/architecture/path-anchors.md` (#526).
 **Preflight** (prod):
 
 ```bash
-test -n "${NOTION_API_KEY:-}" && PYTHONPATH=src uv run python -c "from grocery_wizard.config import load_config; load_config(); print('notion ok')"
+test -n "${NOTION_API_KEY:-}" && PYTHONPATH=src uv run python -c "from grocery_hub.config import load_config; load_config(); print('notion ok')"
 ```
 
 **Preflight** (Cloud / CI): `AGENTS.md`, `docs/operations/notion-ci-setup.md`.
@@ -127,9 +127,9 @@ Global: **Refresh**, **Feedback**, loading banner, dropdown dismiss (Tier B + ti
 
 ### 5. Optional deeper checks
 
-- Live read-only holistic: `uv run pytest tests/src/grocery_wizard/ui/test_holistic_ui_smoke_apptest.py -k "live and read_only" -q`
+- Live read-only holistic: `uv run pytest tests/src/grocery_hub/ui/test_holistic_ui_smoke_apptest.py -k "live and read_only" -q`
 - NYT sync UI on Add Recipe: block renders (full sync optional)
-- Dev jumps (`GROCERY_WIZARD_DEV_UI=1`): Dev → Final list / golden path
+- Dev jumps (`GROCERY_HUB_DEV_UI=1`): Dev → Final list / golden path
 
 ### 6. Sign-off checklist
 

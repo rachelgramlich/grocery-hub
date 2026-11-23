@@ -1,0 +1,549 @@
+"""Tests for store aisle classification and sorting."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+import pytest
+
+from src.grocery_hub.shopping.store_aisles import (
+    aisle_label,
+    canonical_pantry_section_label,
+    classify_aisle,
+    group_grocery_items_by_aisle,
+    is_legacy_notion_aisle_label,
+    load_store_aisles,
+    pantry_aisle_for_item,
+    parse_store_aisles_file,
+    resolve_pantry_aisle_id,
+    sort_grocery_items,
+    strip_checklist_prefix,
+)
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+
+def test_parse_store_aisles_file_reads_sections_and_keywords(tmp_path: Path) -> None:
+    path = tmp_path / "store_aisles.txt"
+    path.write_text(
+        "# --- produce: Fresh stuff ---\nonion\ngarlic\n\n# --- other: Other ---\n# catch-all",
+        encoding="utf-8",
+    )
+
+    config = parse_store_aisles_file(path)
+
+    assert config.aisle_order == ("produce", "other")
+    assert config.aisle_labels["produce"] == "Fresh stuff"
+    assert config.aisle_keywords["produce"] == ("onion", "garlic")
+
+
+def test_parse_store_aisles_file_reads_product_overrides(tmp_path: Path) -> None:
+    path = tmp_path / "store_aisles.txt"
+    path.write_text(
+        "# --- products: Product overrides ---\n"
+        "snacks: apple chips\n"
+        "# --- fruit: Fruit ---\n"
+        "apple\n"
+        "# --- other: Other ---\n",
+        encoding="utf-8",
+    )
+
+    config = parse_store_aisles_file(path)
+
+    assert "products" not in config.aisle_order
+    assert config.product_phrases == (("apple chips", "snacks"),)
+
+
+def test_classify_aisle_v2_product_beats_generic_token(tmp_path: Path) -> None:
+    path = tmp_path / "store_aisles.txt"
+    path.write_text(
+        "# --- products: Product overrides ---\n"
+        "snacks: apple chips\n"
+        "# --- fruit: Fruit ---\n"
+        "apple\n"
+        "# --- snacks: Snacks ---\n"
+        "chips\n"
+        "# --- other: Other ---\n",
+        encoding="utf-8",
+    )
+    config = parse_store_aisles_file(path)
+
+    assert classify_aisle("apple chips", config=config) == "snacks"
+    assert classify_aisle("apples", config=config) == "fruit"
+
+
+def test_classify_aisle_v2_modifier_frozen(tmp_path: Path) -> None:
+    path = tmp_path / "store_aisles.txt"
+    path.write_text(
+        "# --- vegetables: Vegetables ---\n"
+        "cauliflower\n"
+        "# --- frozen: Frozen ---\n"
+        "frozen peas\n"
+        "# --- other: Other ---\n",
+        encoding="utf-8",
+    )
+    config = parse_store_aisles_file(path)
+
+    assert classify_aisle("frozen pizza", config=config) == "frozen"
+
+
+def test_load_store_aisles_uses_committed_config() -> None:
+    config = load_store_aisles()
+    assert config.aisle_order[0] == "flowers"
+    assert config.aisle_order.index("flowers") < config.aisle_order.index("fruit")
+    assert config.aisle_order.index("fruit") < config.aisle_order.index("vegetables")
+    assert "grape tomato" in config.aisle_keywords["vegetables"]
+    assert config.aisle_order.index("vegetables") < config.aisle_order.index("refrigerated")
+    assert config.aisle_labels["flowers"] == "Flowers"
+    assert config.aisle_labels["household/personal care"] == "Household and personal care"
+    assert config.aisle_labels["fruit"] == "Fruit"
+    assert config.aisle_labels["meat/fish"] == "Meat & fish"
+    assert "banana" in config.aisle_keywords["fruit"]
+    assert "onion" in config.aisle_keywords["vegetables"]
+    assert "apple cider" in config.aisle_keywords["drinks"]
+    assert "cookie" in config.aisle_keywords["nuts/desserts"]
+    assert "potato chips" in config.aisle_keywords["snacks/crackers"]
+    assert "peanut butter" in config.aisle_keywords["sauces/condiments"]
+    assert "cumin" in config.aisle_keywords["spices"]
+    assert "olive oil" in config.aisle_keywords["oils & vinegars"]
+
+
+EXPECTED_AISLE_WALK_ORDER = (
+    "flowers",
+    "fruit",
+    "vegetables",
+    "refrigerated",
+    "snacks/crackers",
+    "pet treats",
+    "drinks",
+    "dairy/eggs",
+    "household/personal care",
+    "meat/fish",
+    "bakery",
+    "nuts/desserts",
+    "candy",
+    "oils & vinegars",
+    "cereal",
+    "spices",
+    "pasta/grains",
+    "baking",
+    "sauces/condiments",
+    "canned goods",
+    "coffee",
+    "frozen",
+    "other",
+)
+
+
+def test_committed_aisle_walk_order_matches_store() -> None:
+    assert load_store_aisles().aisle_order == EXPECTED_AISLE_WALK_ORDER
+
+
+@pytest.mark.parametrize(
+    ("item", "expected_aisle"),
+    [
+        ("dog treats", "pet treats"),
+        ("dog treat", "pet treats"),
+        ("pet treats", "pet treats"),
+        ("cat treats", "pet treats"),
+        ("2 bags dog treats", "pet treats"),
+        ("dog treat oreos", "pet treats"),
+        ("dog food", "other"),
+        ("coffee beans", "coffee"),
+    ],
+)
+def test_classify_pet_treats_and_dog_food(item: str, expected_aisle: str) -> None:
+    assert classify_aisle(item) == expected_aisle
+
+
+@pytest.mark.parametrize(
+    ("item", "expected_aisle"),
+    [
+        ("2 grapefruits", "fruit"),
+        ("salsa", "sauces/condiments"),
+        ("mini chocolate chips", "baking"),
+        ("tortellini", "refrigerated"),
+        ("cheese tortellini", "refrigerated"),
+        ("ravioli", "refrigerated"),
+    ],
+)
+def test_classify_feedback_routing(item: str, expected_aisle: str) -> None:
+    assert classify_aisle(item) == expected_aisle
+
+
+@pytest.mark.parametrize(
+    ("item", "expected_aisle"),
+    [
+        ("creamer", "dairy/eggs"),
+        ("coffee creamer", "dairy/eggs"),
+        ("nondairy creamer", "dairy/eggs"),
+        ("2 bottles coffee creamer", "dairy/eggs"),
+        ("coffee beans", "coffee"),
+    ],
+)
+def test_classify_creamer_as_dairy(item: str, expected_aisle: str) -> None:
+    assert classify_aisle(item) == expected_aisle
+
+
+def test_sort_grocery_items_puts_pet_treats_after_snacks_before_drinks() -> None:
+    items = ["frozen peas", "coffee beans", "2 cans white beans", "dog treats", "eggs", "soap"]
+
+    assert sort_grocery_items(items) == [
+        "dog treats",
+        "eggs",
+        "soap",
+        "2 cans white beans",
+        "coffee beans",
+        "frozen peas",
+    ]
+
+
+@pytest.mark.parametrize(
+    "item",
+    [
+        "red pepper",
+        "red peppers",
+        "2 orange peppers",
+        "yellow pepper",
+        "green pepper",
+        "1 sweet pepper",
+        "mini sweet peppers",
+        "hot pepper",
+        "chile pepper",
+        "jalape\u00f1o pepper",
+        "jalapeno pepper",
+        "jalape\u00f1o peppers",
+        "jalapeno peppers",
+        "serrano pepper",
+        "poblano peppers",
+        "fresno pepper",
+        "habanero pepper",
+        "anaheim peppers",
+        "banana pepper",
+        "cubanelle peppers",
+        "shishito peppers",
+        "padron peppers",
+        "scotch bonnet pepper",
+        "cherry peppers",
+        "1 red pepper, seeded",
+        "bell pepper",
+        "red bell pepper",
+        "2 red bell peppers",
+    ],
+)
+def test_fresh_peppers_classify_as_vegetables(item: str) -> None:
+    assert classify_aisle(item) == "vegetables"
+
+
+@pytest.mark.parametrize(
+    "item",
+    [
+        "pepper",
+        "black pepper",
+        "ground pepper",
+        "white pepper",
+        "cayenne pepper",
+        "red pepper flakes",
+        "red pepper flake",
+        "red-pepper flakes",
+        "crushed red pepper",
+        "crushed red pepper flakes",
+        "hot pepper flakes",
+    ],
+)
+def test_pepper_spices_stay_in_spices(item: str) -> None:
+    assert classify_aisle(item) == "spices"
+
+
+def test_pepper_lookalikes_keep_their_aisles() -> None:
+    assert classify_aisle("pepper jack cheese") == "refrigerated"
+    assert classify_aisle("pepperoni") == "other"
+    assert classify_aisle("peppermint") == "other"
+
+
+def test_load_store_aisles_warns_when_file_missing(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    missing = tmp_path / "missing_aisles.txt"
+    load_store_aisles(str(missing))
+    assert "store aisle config not found" in capsys.readouterr().err
+
+
+def test_load_store_aisles_reloads_after_file_changes(tmp_path: Path) -> None:
+    path = tmp_path / "store_aisles.txt"
+    path.write_text(
+        "# --- fruit: Fruit ---\napple\n# --- other: Other ---",
+        encoding="utf-8",
+    )
+    first = load_store_aisles(str(path))
+    assert "apple" in first.aisle_keywords["fruit"]
+
+    path.write_text(
+        "# --- fruit: Fruit ---\nbanana\n# --- other: Other ---",
+        encoding="utf-8",
+    )
+    second = load_store_aisles(str(path))
+    assert "banana" in second.aisle_keywords["fruit"]
+    assert "apple" not in second.aisle_keywords["fruit"]
+
+
+@pytest.mark.parametrize(
+    ("item", "expected_aisle"),
+    [
+        ("1 lb chicken breast", "meat/fish"),
+        ("1 pound loose sweet italian sausage or sausage links", "meat/fish"),
+        ("2 cans artichoke hearts", "canned goods"),
+        ("avocados", "fruit"),
+        ("edamame", "vegetables"),
+        ("lemons", "fruit"),
+        ("mini cucumbers", "vegetables"),
+        ("salmon / tuna", "meat/fish"),
+        ("scallions", "vegetables"),
+        ("seaweed sheets", "sauces/condiments"),
+        ("onions", "vegetables"),
+        ("3 cloves garlic", "vegetables"),
+        ("bananas", "fruit"),
+        ("berries", "fruit"),
+        ("2 cans white beans", "canned goods"),
+        ("1 lb spaghetti", "pasta/grains"),
+        ("eggs", "dairy/eggs"),
+        ("2 eggs", "dairy/eggs"),
+        ("milk", "dairy/eggs"),
+        ("shredded cheddar", "refrigerated"),
+        ("frozen peas", "frozen"),
+        ("coffee beans", "coffee"),
+        ("almonds", "nuts/desserts"),
+        ("potato chips", "snacks/crackers"),
+        ("all-purpose flour", "baking"),
+        ("sourdough bread", "bakery"),
+        ("8 corn tortillas", "bakery"),
+        ("la croix", "drinks"),
+        ("chicken", "meat/fish"),
+        ("chimichurri", "refrigerated"),
+        ("avocado oil", "oils & vinegars"),
+        ("apple chips", "nuts/desserts"),
+        ("cauliflower rice", "frozen"),
+        ("frozen cauliflower rice", "frozen"),
+    ],
+)
+def test_classify_aisle(item: str, expected_aisle: str) -> None:
+    assert classify_aisle(item) == expected_aisle
+
+
+def test_sort_grocery_items_follows_store_walk_order() -> None:
+    items = [
+        "2 cans white beans",
+        "onions",
+        "bananas",
+        "eggs",
+        "milk",
+        "1 lb chicken breast",
+        "sourdough bread",
+        "shredded cheddar",
+        "frozen peas",
+    ]
+    sorted_items = sort_grocery_items(items)
+
+    fruit_index = sorted_items.index("bananas")
+    vegetables_index = sorted_items.index("onions")
+    refrigerated_index = sorted_items.index("shredded cheddar")
+    dairy_index = sorted_items.index("eggs")
+    meat_index = sorted_items.index("1 lb chicken breast")
+    bakery_index = sorted_items.index("sourdough bread")
+    canned_index = sorted_items.index("2 cans white beans")
+    frozen_index = sorted_items.index("frozen peas")
+
+    assert (
+        fruit_index
+        < vegetables_index
+        < refrigerated_index
+        < dairy_index
+        < meat_index
+        < bakery_index
+        < canned_index
+        < frozen_index
+    )
+    assert sorted_items.index("milk") < meat_index
+
+
+def test_group_grocery_items_by_aisle_omits_empty_aisles() -> None:
+    items = ["onions", "apples", "eggs", "2 cans white beans"]
+    groups = group_grocery_items_by_aisle(items)
+
+    assert [aisle for aisle, _ in groups] == [
+        "fruit",
+        "vegetables",
+        "dairy/eggs",
+        "canned goods",
+    ]
+    assert groups[0][1] == ["apples"]
+    assert groups[1][1] == ["onions"]
+    assert groups[2][1] == ["eggs"]
+    assert groups[3][1] == ["2 cans white beans"]
+
+
+def test_sort_grocery_items_is_stable_within_aisle() -> None:
+    items = ["zucchini", "apples", "onions"]
+    assert sort_grocery_items(items) == ["apples", "onions", "zucchini"]
+
+
+def test_aisle_order_has_other_last() -> None:
+    config = load_store_aisles()
+    assert config.aisle_order[-1] == "other"
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("- [ ] Bananas", "Bananas"),
+        ("[ ] milk", "milk"),
+        ("- [x] Berries", "Berries"),
+        ("1. [ ] Apples", "Apples"),
+        ("• onions", "onions"),
+        ("  - [ ]  Asparagus  ", "Asparagus"),
+    ],
+)
+def test_strip_checklist_prefix(raw: str, expected: str) -> None:
+    assert strip_checklist_prefix(raw) == expected
+
+
+@pytest.mark.parametrize(
+    ("item", "expected_aisle"),
+    [
+        ("- [ ] Bananas", "fruit"),
+        ("[ ] milk", "dairy/eggs"),
+        ("- [ ] Asparagus", "vegetables"),
+    ],
+)
+def test_classify_aisle_strips_checklist_prefix(item: str, expected_aisle: str) -> None:
+    assert classify_aisle(item) == expected_aisle
+
+
+@pytest.mark.parametrize(
+    ("item", "expected_aisle"),
+    [
+        ("Apple cider", "drinks"),
+        ("Canned peaches", "canned goods"),
+        ("Raspberry jam", "sauces/condiments"),
+        ("Apricot jam", "sauces/condiments"),
+        ("Canned corn", "canned goods"),
+        ("Peanut butter", "sauces/condiments"),
+        ("1 lime, juiced", "fruit"),
+        ("1 pound potatoes, unpeeled but scrubbed clean", "vegetables"),
+        ("Applesauce", "sauces/condiments"),
+        ("Cold foam", "dairy/eggs"),
+        ("Flowers", "flowers"),
+        ("- [ ] Flowers", "flowers"),
+        ("Hand soap", "household/personal care"),
+        ("Lox pastrami kind", "meat/fish"),
+        ("Mexican crema", "dairy/eggs"),
+        ("Pesto", "refrigerated"),
+        ("1 pint grape tomatoes", "vegetables"),
+        ("1 pint cherry tomatoes", "vegetables"),
+        ("1 bunch broccolini", "vegetables"),
+        ("2 leeks", "vegetables"),
+        ("leeks", "vegetables"),
+        ("2 leeks, light green white parts only", "vegetables"),
+        ("pasta for squash", "pasta/grains"),
+        ("cheese sticks", "refrigerated"),
+        ("pudding vanilla", "dairy/eggs"),
+        ("coconut oil", "oils & vinegars"),
+        ("hash brown", "frozen"),
+        ("bfast sausage", "frozen"),
+        ("1 1/2 lb paneer", "refrigerated"),
+        ("1/2 bottle thai red curry sauce", "sauces/condiments"),
+        ("thai green chiles", "vegetables"),
+        ("buffalo sauce", "sauces/condiments"),
+        ("hot sauce", "sauces/condiments"),
+        ("hot pepper sauce", "sauces/condiments"),
+        ("teriyaki sauce", "sauces/condiments"),
+        ("pkgs gnocchi", "pasta/grains"),
+        ("gnocchi", "pasta/grains"),
+        ("roti", "bakery"),
+        ("nondairy creamer", "dairy/eggs"),
+        ("laundry detergent", "household/personal care"),
+        ("shaving cream", "household/personal care"),
+        ("pumpkin candle", "household/personal care"),
+        ("butter lettuce", "vegetables"),
+        ("2 medium leeks", "vegetables"),
+        ("apple cider vinegar", "oils & vinegars"),
+        ("bay leaves", "spices"),
+        ("chicken bouillon", "canned goods"),
+        ("1 can corn", "canned goods"),
+        ("2 cans chickpeas", "canned goods"),
+        ("1 1/2 lb skinless salmon fillet", "meat/fish"),
+        ("1 box cornbread mix", "baking"),
+        ("brownie mix", "baking"),
+        ("1 cauliflower head", "vegetables"),
+        ("butter for freezer", "dairy/eggs"),
+        ("candy snacks?", "candy"),
+        ("chile powder", "spices"),
+        ("cookie dough balls", "frozen"),
+        ("old bay", "spices"),
+        ("sneaky cheese shredded!", "refrigerated"),
+        ("sliced cheese", "refrigerated"),
+    ],
+)
+def test_classify_aisle_misclassifications(item: str, expected_aisle: str) -> None:
+    assert classify_aisle(item) == expected_aisle
+
+
+def test_resolve_pantry_aisle_id_accepts_id_or_label() -> None:
+    config = load_store_aisles()
+    assert resolve_pantry_aisle_id("canned goods", config=config) == "canned goods"
+    assert resolve_pantry_aisle_id("Canned goods", config=config) == "canned goods"
+    assert resolve_pantry_aisle_id(None, config=config) is None
+
+
+def test_legacy_notion_aisle_label() -> None:
+    assert is_legacy_notion_aisle_label("Dry goods / cans / cereal / rice")
+    assert is_legacy_notion_aisle_label("dry goods")
+    assert not is_legacy_notion_aisle_label("Spices & seasonings")
+
+
+def test_pantry_aisle_for_item_reclassifies_legacy_notion_label() -> None:
+    config = load_store_aisles()
+    assert (
+        pantry_aisle_for_item(
+            "cumin",
+            "Dry goods / cans / cereal / rice",
+            config=config,
+        )
+        == "spices"
+    )
+
+
+def test_pantry_aisle_for_item_uses_section_or_classifies_name() -> None:
+    config = load_store_aisles()
+    assert (
+        pantry_aisle_for_item("soy sauce", "Sauces & condiments", config=config)
+        == "sauces/condiments"
+    )
+    assert pantry_aisle_for_item("bananas", None, config=config) == "fruit"
+
+
+def test_pantry_aisle_for_item_prefers_notion_aisle_over_name_guess() -> None:
+    config = load_store_aisles()
+    # Classifier would put bananas in fruit, but Notion says baking — UI must follow Notion.
+    assert pantry_aisle_for_item("bananas", "Baking", config=config) == "baking"
+
+
+def test_canonical_pantry_section_label_from_aisle_id() -> None:
+    config = load_store_aisles()
+    assert canonical_pantry_section_label(None, aisle_id="fruit", config=config) == aisle_label(
+        "fruit",
+        config=config,
+    )
+
+
+def test_candy_sorts_after_dried_fruit() -> None:
+    items = ["candy snacks?", "dried apricots", "4 medjool dates", "avocado oil"]
+
+    assert sort_grocery_items(items) == [
+        "4 medjool dates",
+        "dried apricots",
+        "candy snacks?",
+        "avocado oil",
+    ]

@@ -1,4 +1,4 @@
-"""Pytest configuration for grocery_wizard tests."""
+"""Pytest configuration for grocery_hub tests."""
 
 from __future__ import annotations
 
@@ -41,15 +41,15 @@ def pytest_configure(config: object) -> None:
 @pytest.fixture(autouse=True)
 def _notion_test_doubles(monkeypatch: pytest.MonkeyPatch) -> None:
     """Avoid live Notion API calls during tests (CI has no integration secrets)."""
-    from src.grocery_wizard.integrations.notion_table import clear_notion_database_metadata_cache
-    from src.grocery_wizard.ui.notion_cache import _recipe_store
+    from src.grocery_hub.integrations.notion_table import clear_notion_database_metadata_cache
+    from src.grocery_hub.ui.notion_cache import _recipe_store
 
     clear_notion_database_metadata_cache()
     _recipe_store.clear()
-    import src.grocery_wizard.shopping.pantry as pantry_mod
-    import src.grocery_wizard.shopping.recurring_weekly_items as recurring_mod
-    from src.grocery_wizard.integrations.notion import ColumnInfo, Recipe
-    from src.grocery_wizard.recipes.weeknight import DEFAULT_WEEKNIGHT_COLUMN
+    import src.grocery_hub.shopping.pantry as pantry_mod
+    import src.grocery_hub.shopping.recurring_weekly_items as recurring_mod
+    from src.grocery_hub.integrations.notion import ColumnInfo, Recipe
+    from src.grocery_hub.recipes.weeknight import DEFAULT_WEEKNIGHT_COLUMN
 
     def load_pantry(path: Path | None = None) -> set[str]:
         if path is not None:
@@ -57,7 +57,7 @@ def _notion_test_doubles(monkeypatch: pytest.MonkeyPatch) -> None:
         return set()
 
     monkeypatch.setattr(pantry_mod, "load_pantry", load_pantry)
-    monkeypatch.setattr("src.grocery_wizard.shopping.grocery_list.load_pantry", load_pantry)
+    monkeypatch.setattr("src.grocery_hub.shopping.grocery_list.load_pantry", load_pantry)
 
     def load_recurring(path: Path | None = None) -> list[str]:
         if path is not None:
@@ -66,7 +66,7 @@ def _notion_test_doubles(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(recurring_mod, "load_recurring_weekly_items", load_recurring)
     monkeypatch.setattr(
-        "src.grocery_wizard.ui.notion_cache._load_recurring_cached",
+        "src.grocery_hub.ui.notion_cache._load_recurring_cached",
         lambda _generation: [],
     )
 
@@ -96,11 +96,11 @@ def _notion_test_doubles(monkeypatch: pytest.MonkeyPatch) -> None:
 
     patch_ui_get_db(monkeypatch, _fake_get_db)
     monkeypatch.setattr(
-        "src.grocery_wizard.ui.notion_cache._load_pantry_cached",
+        "src.grocery_hub.ui.notion_cache._load_pantry_cached",
         lambda _generation, _household_db_id: [],
     )
     monkeypatch.setattr(
-        "src.grocery_wizard.ui.notion_cache._load_saved_plans_cached",
+        "src.grocery_hub.ui.notion_cache._load_saved_plans_cached",
         lambda _weekly_plans_database_id, _generation, _recipes_db: [],
     )
 
@@ -110,7 +110,7 @@ def _notion_test_doubles(monkeypatch: pytest.MonkeyPatch) -> None:
         return pid, f"https://www.notion.so/{pid.replace('-', '')}"
 
     monkeypatch.setattr(
-        "src.grocery_wizard.integrations.notion_list_logs.persist_list_log_to_notion",
+        "src.grocery_hub.integrations.notion_list_logs.persist_list_log_to_notion",
         _fake_persist_list_log,
     )
 

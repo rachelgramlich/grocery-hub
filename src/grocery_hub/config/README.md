@@ -1,0 +1,68 @@
+# Grocery Hub config files
+
+Paths and env loading live in `__init__.py`. This folder holds **shared product config** only; personal household data lives in Notion.
+
+## What stays in the repo
+
+| File | Role |
+|------|------|
+| **`store_aisles.txt`** | Source of truth for store walk order, aisle labels, ingredient keywords, and **product overrides** (`# --- products: Product overrides ---`, lines `aisle_id: phrase`). Edit here and commit — section headers like `# --- Produce ---`. |
+| **`__init__.py`** | Notion credentials and database IDs. |
+
+`store_aisles.txt` should **not** move to Notion; it is shared app configuration, not personal household data. Rationale and boundaries (repo rules vs Notion pantry rows): [decision #268](https://github.com/rachelgramlich/grocery-hub/issues/268).
+
+## Personal data (Notion only)
+
+Pantry staples, recurring weekly items, and saved weekly meal plans live in **Notion databases** (same integration as Recipes). They are **not** committed in this repo.
+
+| Data | Notion database | Properties |
+|------|-----------------|------------|
+| Pantry staples | Pantry | **Name** (title), **Store Aisle** or **Aisle** (select — labels from `store_aisles.txt`) |
+| Recurring weekly items | Recurring | **Name** (title) only |
+| Saved weekly meal plans | Weekly plans | **Name**, **Week start**, **Recipes** (relation → Recipes) |
+| Debug logs (weekly grocery list builds only) | **`[GW DEV] Debug logs`** | **Name** (title), **Log JSON** (Notion **Text** — API `text` or `rich_text`); optional **Built at** (date), **Meals** (Text), **Type** or **Surface** (select — app sets `weekly grocery list`) |
+
+Only **weekly grocery list** builds write to this database today. No other app pages or flows append rows yet.
+
+Each successful weekly grocery list build appends one row (JSON trace: meals, pantry skips, sources, final list). Connect the database to the same Notion integration as Recipes.
+
+Plan **Name** is the sole identifier (e.g. `2026-09-13_plan`); no slug column.
+
+Current-week session state may still use `.local/grocery_hub/week_plan.json` (gitignored) until fully Notion-backed for “this session” if needed.
+
+### Recurring items: template vs one run
+
+1. **Template** — default list every grocery run (Notion recurring DB).
+2. **This run only** — additions/removals for a single session; must not update the template unless the user explicitly edits defaults.
+
+Pantry edits from the UI similarly distinguish one-off vs changing the saved staple list in Notion.
+
+## Notion env
+
+**GitHub Actions:** `NOTION_CI_API_KEY` (workflow sets job `NOTION_API_KEY` from it), optional `NOTION_DATA_SOURCE_ID`, and **`NOTION_CI_*_DATABASE_ID`** for the four test-workspace database IDs (workflow maps database secrets to `NOTION_*_DATABASE_ID` for pytest). **App, Streamlit, and local `.env`:** standard `NOTION_*` names only.
+
+Required for Grocery Hub:
+
+- `NOTION_API_KEY`
+- `NOTION_RECIPE_DATABASE_ID` (legacy alias `NOTION_DATABASE_ID`)
+- `NOTION_PANTRY_DATABASE_ID`
+- `NOTION_RECURRING_WEEKLY_DATABASE_ID`
+- `NOTION_WEEKLY_MEAL_PLANS_DATABASE_ID`
+- `NOTION_DEBUG_LOGS_DATABASE_ID` (legacy alias `NOTION_LIST_DEBUG_LOGS_DATABASE_ID`)
+
+**Cursor Cloud Agents:** use the same **`NOTION_CI_*`** secret names as GitHub Actions (not prod `NOTION_*` in the Cloud env). `tests/notion_test_env.py` maps them for live pytest / preflight; see **`docs/operations/notion-ci-setup.md`** and **`AGENTS.md`**.
+
+Optional: `NOTION_DATA_SOURCE_ID` — force a specific data source when a Notion database exposes multiple sources (see `integrations/notion_data_source.py`). Recipes DB resolution prefers the source whose schema includes **Link** when unset.
+
+Optional recipe **cover image** (Files column used by Browse and image backfill):
+
+- Add a **Files** property on the Recipes database, e.g. **Cover image**.
+- Set `GROCERY_HUB_RECIPE_IMAGE_COLUMN=Cover image` when the column name is not auto-detected.
+- Recipe maintenance → **Backfill missing cover images** (dry run first).
+- New recipes from **Add Recipe** / NYT sync attempt a best-effort upload; save still succeeds if image fetch fails.
+
+### Pantry `Aisle` select options
+
+When you create the pantry database, add an **Aisle** column (legacy **Section** still works). Option labels should match the display labels in `store_aisles.txt` (section headers use `# --- aisle_id: Notion label ---`).
+
+After you change aisle sections or labels in `store_aisles.txt`, run **`just sync-pantry-aisles`** to push select options to Notion and remap rows from keyword classification. **Refresh from Notion** in the UI only reloads pantry rows; it does not update aisle definitions.

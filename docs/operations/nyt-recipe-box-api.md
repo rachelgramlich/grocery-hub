@@ -1,11 +1,11 @@
 # NYT Cooking recipe box API (unofficial)
 
-Grocery Wizard uses the same JSON endpoints as [cooking.nytimes.com](https://cooking.nytimes.com).  
-`NYTCookingClient` in `src/grocery_wizard/integrations/nyt_cooking.py` supports **read** (sync to Notion) and **write** (save, folders).
+Grocery Hub uses the same JSON endpoints as [cooking.nytimes.com](https://cooking.nytimes.com).
+`NYTCookingClient` in `src/grocery_hub/integrations/nyt_cooking.py` supports **read** (sync to Notion) and **write** (save, folders).
 
 ## Credentials
 
-`NYT_S_COOKIE` and `NYT_REGI_ID` (or `NYT_USER_ID`) in `.env` or Cloud Agent secrets. See `src/grocery_wizard/README.md`.
+`NYT_S_COOKIE` and `NYT_REGI_ID` (or `NYT_USER_ID`) in `.env` or Cloud Agent secrets. See `src/grocery_hub/README.md`.
 
 ## Write operations
 
@@ -24,11 +24,11 @@ Grocery Wizard uses the same JSON endpoints as [cooking.nytimes.com](https://coo
 
 ## Streamlit
 
-**Add recipe → Sync from NYT Cooking** includes **Recipe box organization**: preview or file saved recipes that are not in any folder into a target folder (default `1 to make`, override with `GROCERY_WIZARD_NYT_ORPHAN_FOLDER`). This updates NYT only — run **Sync to Notion** separately.
+**Add recipe → Sync from NYT Cooking** includes **Recipe box organization**: preview or file saved recipes that are not in any folder into a target folder (default `1 to make`, override with `GROCERY_HUB_NYT_ORPHAN_FOLDER`). This updates NYT only — run **Sync to Notion** separately.
 
 Other write helpers remain available for scripts (`scripts/nyt_orphans_to_folder.py`).
 
 ## One-off account migration
 
-Migration from rg-playground (Nov 2025) proved bulk folder recreate via API.  
+Migration from rg-playground (Nov 2025) proved bulk folder recreate via API.
 Archived scripts live in [rg-playground](https://github.com/rachelgramlich/rg-playground) `scripts/` on branch history; prefer `NYTCookingClient` here for any new automation.

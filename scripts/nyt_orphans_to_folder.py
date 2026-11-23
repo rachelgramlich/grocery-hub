@@ -11,7 +11,7 @@ _REPO = Path(__file__).resolve().parents[1]
 if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 
-from src.grocery_wizard.integrations.nyt_cooking import (  # noqa: E402
+from src.grocery_hub.integrations.nyt_cooking import (  # noqa: E402
     NYTCookingClient,
     default_orphan_target_folder,
     file_orphans_into_folder,

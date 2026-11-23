@@ -1,8 +1,8 @@
 # Notion CI test databases (#426)
 
-GitHub Actions can run **live read-only** pytest against a **CI copy** of your four Grocery Wizard Notion databases. Golden weeks and `just smoke-ui` still run on every PR without secrets; this setup is optional and catches Notion schema / API drift.
+GitHub Actions can run **live read-only** pytest against a **CI copy** of your four Grocery Hub Notion databases. Golden weeks and `just smoke-ui` still run on every PR without secrets; this setup is optional and catches Notion schema / API drift.
 
-Household production is **one** Streamlit Community Cloud app ([`docs/operations/household-deploy.md`](household-deploy.md)); experiment on **`[GW CI]`** via local Streamlit (`NOTION_CI_*` / `GROCERY_WIZARD_NOTION_CI_LIVE`) or GitHub/Cursor CI secrets—not a second Cloud deploy ([#356](https://github.com/rachelgramlich/grocery-wizard/issues/356)).
+Household production is **one** Streamlit Community Cloud app ([`docs/operations/household-deploy.md`](household-deploy.md)); experiment on **`[GW CI]`** via local Streamlit (`NOTION_CI_*` / `GROCERY_HUB_NOTION_CI_LIVE`) or GitHub/Cursor CI secrets—not a second Cloud deploy ([#356](https://github.com/rachelgramlich/grocery-hub/issues/356)).
 
 Workflow: [`.github/workflows/notion-nightly-readonly.yml`](../.github/workflows/notion-nightly-readonly.yml) (display name *Notion read-only integration*). Runs on **`pull_request`** to **`main`** (same repo, when secrets are set) and **`workflow_dispatch`** — no scheduled cron.
 
@@ -25,7 +25,7 @@ Use the **same five secret names** as the GitHub checklist below. Agents map the
 
 ## Recommended database titles and schema
 
-Match production **property names** (see [`src/grocery_wizard/config/README.md`](../src/grocery_wizard/config/README.md)):
+Match production **property names** (see [`src/grocery_hub/config/README.md`](../src/grocery_hub/config/README.md)):
 
 | Database | Required properties |
 | --- | --- |
@@ -75,8 +75,8 @@ export NOTION_CI_RECIPE_DATABASE_ID='…'
 export NOTION_CI_PANTRY_DATABASE_ID='…'
 export NOTION_CI_RECURRING_WEEKLY_DATABASE_ID='…'
 export NOTION_CI_WEEKLY_MEAL_PLANS_DATABASE_ID='…'
-export GROCERY_WIZARD_NOTION_CI_LIVE=1
-PYTHONPATH=src uv run python -m grocery_wizard.integrations.notion_ci_schema
+export GROCERY_HUB_NOTION_CI_LIVE=1
+PYTHONPATH=src uv run python -m grocery_hub.integrations.notion_ci_schema
 PYTHONPATH=src uv run pytest -k "live and read_only" -q
 ```
 
@@ -86,7 +86,7 @@ See [`tests/notion_test_env.py`](../tests/notion_test_env.py).
 
 ## Example CI workspace (created for this repo)
 
-These databases were created in Notion with the **`[GW CI]`** prefix and minimal seed rows. **Reconnect your Grocery Wizard integration** to each database before CI can read them.
+These databases were created in Notion with the **`[GW CI]`** prefix and minimal seed rows. **Reconnect your Grocery Hub integration** to each database before CI can read them.
 
 | Database | Notion link | Database ID (for GitHub secret) |
 | --- | --- | --- |
@@ -102,4 +102,4 @@ To duplicate manually instead: in Notion, **Duplicate** each `[GW]` database, re
 ## Related docs
 
 - [`docs/quality/grocery-quality.md`](../quality/grocery-quality.md) — golden weeks + live CI behavior
-- GitHub issue [#426](https://github.com/rachelgramlich/grocery-wizard/issues/426)
+- GitHub issue [#426](https://github.com/rachelgramlich/grocery-hub/issues/426)

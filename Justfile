@@ -1,4 +1,4 @@
-# Justfile for grocery-wizard
+# Justfile for grocery-hub
 
 set dotenv-load
 
@@ -51,7 +51,7 @@ golden-grocery:
 
 # Export your real Notion meal plan into tests/fixtures/golden_grocery_weeks/<id>.json
 export-golden-week ID RECIPES *ARGS:
-    PYTHONPATH=src uv run python -m src.grocery_wizard.dev.export_golden_week --id {{ID}} {{RECIPES}} {{ARGS}}
+    PYTHONPATH=src uv run python -m src.grocery_hub.dev.export_golden_week --id {{ID}} {{RECIPES}} {{ARGS}}
 
 # Run tests with coverage
 test-cov:
@@ -70,18 +70,21 @@ link-secrets:
       exit 1
     fi
 
-# Run Grocery Wizard Streamlit UI (laptop / same-WiFi phone)
-grocery-ui *ARGS:
+# Run Grocery Hub Streamlit UI (laptop / same-WiFi phone)
+ui *ARGS:
     just link-secrets
-    uv run streamlit run src/grocery_wizard/ui/app.py {{ARGS}}
+    uv run streamlit run src/grocery_hub/ui/app.py {{ARGS}}
+
+grocery-ui *ARGS:
+    @just ui {{ARGS}}
 
 # Push store_aisles.txt labels to Notion pantry Store Aisle options and remap rows
 sync-pantry-aisles:
-    PYTHONPATH=src uv run python -c "from grocery_wizard.integrations.notion_pantry_setup import sync_pantry_section_store_aisles; r = sync_pantry_section_store_aisles(); print(f'Updated {len(r.aisle_labels)} aisle options; remapped {r.rows_migrated} rows.')"
+    PYTHONPATH=src uv run python -c "from grocery_hub.integrations.notion_pantry_setup import sync_pantry_section_store_aisles; r = sync_pantry_section_store_aisles(); print(f'Updated {len(r.aisle_labels)} aisle options; remapped {r.rows_migrated} rows.')"
 
 # Time every Streamlit control against live Notion (writes stubbed); see docs/quality/performance-audit.md
 performance-audit *ARGS:
-    uv run python -m src.grocery_wizard.dev.perf_audit {{ARGS}}
+    uv run python -m src.grocery_hub.dev.perf_audit {{ARGS}}
 
 # Alias for scripts/docs that still say perf-audit
 perf-audit *ARGS:

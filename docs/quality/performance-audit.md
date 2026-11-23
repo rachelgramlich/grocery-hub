@@ -1,6 +1,6 @@
 # Performance audit (`/performance-audit`)
 
-Repeatable, headless timing of **every control** in the Streamlit app against live Notion, ranked slowest-first, with flags that point at the likely cause. Slash command: `.cursor/commands/grocery-wizard/performance-audit.md`. Code: `src/grocery_wizard/dev/perf_audit/`.
+Repeatable, headless timing of **every control** in the Streamlit app against live Notion, ranked slowest-first, with flags that point at the likely cause. Slash command: `.cursor/commands/grocery-hub/performance-audit.md`. Code: `src/grocery_hub/dev/perf_audit/`.
 
 **See also:** [`docs/quality/performance.md`](performance.md) — load-time optimization summary, before/after table, and post-fix ranked baseline (architecture doc).
 
@@ -11,7 +11,7 @@ just performance-audit --only 'weekly.meals.*' --reps 3 --compare latest   # tar
 just performance-audit --fail-over 5                       # exit 1 if any warm scenario exceeds 5s
 ```
 
-Output lands in `.local/grocery_wizard/perf/perf-<stamp>.md|.json`; `latest.json` is the baseline for `--compare latest`.
+Output lands in `.local/grocery_hub/perf/perf-<stamp>.md|.json`; `latest.json` is the baseline for `--compare latest`.
 
 ## How it works
 
@@ -75,7 +75,7 @@ Sources: Streamlit caching docs (`st.cache_data` returns pickled copies, `st.cac
 3. Mark `writes=True` when the interaction writes (the tap stubs the write and charges `--write-latency`, default 0.4s).
 4. Mark `external=True` for NYT/recipe-site/feedback flows: they are skipped and listed so you time them by hand.
 5. List widget keys in `covers` so **Coverage gaps** stays empty.
-6. `just test` (the harness has unit tests in `tests/src/grocery_wizard/dev/test_perf_audit.py`).
+6. `just test` (the harness has unit tests in `tests/src/grocery_hub/dev/test_perf_audit.py`).
 
 ## Limitations
 
