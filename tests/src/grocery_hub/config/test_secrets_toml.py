@@ -32,8 +32,17 @@ GITHUB_FEEDBACK_TOKEN = "gh-test"
     )
     monkeypatch.setenv("NOTION_API_KEY", "from-env")
     for key in list(os.environ):
-        if key.startswith(("GROCERY_", "GITHUB_FEEDBACK_")):
+        if key.startswith("GITHUB_FEEDBACK_") or key in {
+            "REQUIRE_AUTH",
+            "AUTH_EMAIL_ALLOWLIST",
+            "DEFAULT_MEALS",
+            "DEV_UI",
+        }:
             monkeypatch.delenv(key, raising=False)
+    monkeypatch.setattr(
+        "src.grocery_hub.config._apply_streamlit_runtime_secrets_to_environ",
+        lambda: None,
+    )
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(
         "src.grocery_hub.config._secrets_toml_path",
@@ -48,35 +57,6 @@ GITHUB_FEEDBACK_TOKEN = "gh-test"
     assert cfg.github_feedback_token == "gh-test"
 
 
-def test_load_config_accepts_legacy_list_debug_logs_env_alias(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    secrets_path = tmp_path / "secrets.toml"
-    secrets_path.write_text(
-        """\
-NOTION_API_KEY = "from-secrets"
-NOTION_RECIPE_DATABASE_ID = "00000000-0000-4000-8000-000000000001"
-NOTION_PANTRY_DATABASE_ID = "00000000-0000-4000-8000-000000000002"
-NOTION_RECURRING_WEEKLY_DATABASE_ID = "00000000-0000-4000-8000-000000000003"
-NOTION_WEEKLY_MEAL_PLANS_DATABASE_ID = "00000000-0000-4000-8000-000000000004"
-NOTION_LIST_DEBUG_LOGS_DATABASE_ID = "00000000-0000-4000-8000-000000000099"
-""",
-        encoding="utf-8",
-    )
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(
-        "src.grocery_hub.config._secrets_toml_path",
-        lambda: secrets_path,
-    )
-    for key in list(os.environ):
-        if key.startswith("NOTION_"):
-            monkeypatch.delenv(key, raising=False)
-
-    cfg = load_config()
-    assert cfg.notion_debug_logs_database_id == "00000000-0000-4000-8000-000000000099"
-
-
 def test_load_auth_gate_settings_without_notion_keys(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -84,8 +64,8 @@ def test_load_auth_gate_settings_without_notion_keys(
     secrets_path = tmp_path / "secrets.toml"
     secrets_path.write_text(
         """\
-GROCERY_REQUIRE_AUTH = true
-GROCERY_AUTH_EMAIL_ALLOWLIST = "a@example.com"
+REQUIRE_AUTH = true
+AUTH_EMAIL_ALLOWLIST = "a@example.com"
 """,
         encoding="utf-8",
     )
@@ -95,16 +75,20 @@ GROCERY_AUTH_EMAIL_ALLOWLIST = "a@example.com"
         lambda: secrets_path,
     )
     for key in list(os.environ):
-        if key.startswith(
-            ("NOTION_", "GROCERY_", "GITHUB_FEEDBACK_"),
-        ):
+        if key.startswith(("NOTION_", "GITHUB_FEEDBACK_")):
             monkeypatch.delenv(key, raising=False)
+    for key in ("REQUIRE_AUTH", "AUTH_EMAIL_ALLOWLIST"):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setattr(
+        "src.grocery_hub.config._apply_streamlit_runtime_secrets_to_environ",
+        lambda: None,
+    )
 
     gate = load_auth_gate_settings()
     assert gate.require_auth is True
     assert gate.auth_email_allowlist == "a@example.com"
 
-    for key in ("GROCERY_REQUIRE_AUTH", "GROCERY_AUTH_EMAIL_ALLOWLIST"):
+    for key in ("REQUIRE_AUTH", "AUTH_EMAIL_ALLOWLIST"):
         monkeypatch.delenv(key, raising=False)
 
 

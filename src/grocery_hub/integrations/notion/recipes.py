@@ -249,7 +249,7 @@ class NotionRecipesDB:
             return url_columns[0]
         if not url_columns:
             raise ValueError("No URL column found in Notion database")
-        raise ValueError("Multiple URL columns found; set GROCERY_LINK_COLUMN in .env")
+        raise ValueError("Multiple URL columns found; set LINK_COLUMN in .env")
 
     def _resolve_ingredients_column(
         self,

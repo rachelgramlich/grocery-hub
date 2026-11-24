@@ -137,7 +137,7 @@ def apptest_assert_no_exception(at, *, context: str = "AppTest run") -> None:
 
 
 def apptest_enter_dev_mode(at, *, timeout: int = 120) -> None:
-    """Weekly plan → Dev mode → meal-count Continue (requires ``GROCERY_DEV_UI=1``)."""
+    """Weekly plan → Dev mode → meal-count Continue (requires ``DEV_UI=1``)."""
     continue_buttons = [b for b in at.button if b.label == "Continue"]
     assert continue_buttons, "Weekly plan Continue missing"
     continue_buttons[0].click().run(timeout=timeout)

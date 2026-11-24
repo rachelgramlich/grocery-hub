@@ -74,7 +74,7 @@ SITE = "https://cooking.nytimes.com"
 API_HEADERS = {"x-cooking-api": "cooking-frontend", "accept": "*/*"}
 DEFAULT_PER_PAGE = 48
 DEFAULT_NYT_ORPHAN_FOLDER = "1 to make"
-NYT_ORPHAN_FOLDER_ENV = "GROCERY_NYT_ORPHAN_FOLDER"
+NYT_ORPHAN_FOLDER_ENV = "NYT_ORPHAN_FOLDER"
 DEFAULT_ORPHAN_FILE_DELAY_SECONDS = 0.25
 
 _REGI_ID_PATTERN = re.compile(r"regi_id=(\d+)", re.IGNORECASE)

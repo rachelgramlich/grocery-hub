@@ -57,7 +57,7 @@ Optional: `NOTION_DATA_SOURCE_ID` — force a specific data source when a Notion
 Optional recipe **cover image** (Files column used by Browse and image backfill):
 
 - Add a **Files** property on the Recipes database, e.g. **Cover image**.
-- Set `GROCERY_RECIPE_IMAGE_COLUMN=Cover image` when the column name is not auto-detected.
+- Set `RECIPE_IMAGE_COLUMN=Cover image` when the column name is not auto-detected.
 - Recipe maintenance → **Backfill missing cover images** (dry run first).
 - New recipes from **Add Recipe** / NYT sync attempt a best-effort upload; save still succeeds if image fetch fails.
 

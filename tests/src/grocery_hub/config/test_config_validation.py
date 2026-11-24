@@ -25,7 +25,7 @@ def test_format_config_validation_error_lists_fields() -> None:
 
 
 def test_require_auth_coerces_string_true(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("GROCERY_REQUIRE_AUTH", "true")
+    monkeypatch.setenv("REQUIRE_AUTH", "true")
     cfg = Config(
         notion_api_key="k",
         notion_recipe_database_id="00000000-0000-4000-8000-000000000001",

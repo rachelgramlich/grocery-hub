@@ -65,7 +65,7 @@ Area from label `gw-area-<name>` or `### Area` in the issue body.
 When live Notion is needed (browser smoke, `-k "live and read_only"`, or Streamlit against CI data):
 
 1. Prefer **read-only** paths; undo any accidental writes to CI databases before sign-off.
-2. Optional: `export GROCERY_NOTION_CI_LIVE=1` to force CI IDs even if a prod `NOTION_API_KEY` is present in `.env`.
+2. Optional: `export NOTION_CI_LIVE=1` to force CI IDs even if a prod `NOTION_API_KEY` is present in `.env`.
 3. **Preflight** (maps `NOTION_CI_*` → `NOTION_*` like Actions, then `load_config()`):
 
 ```bash
@@ -74,7 +74,7 @@ PYTHONPATH=src uv run python -c "from tests.notion_test_env import apply_notion_
 
 4. **Live pytest:** `uv run pytest tests/src/grocery_hub/ui/test_holistic_ui_smoke_apptest.py -k "live and read_only" -q` (after preflight mapping, or rely on pytest startup via `tests/notion_test_env.py`).
 
-5. **Streamlit:** run preflight mapping in the same shell before `just grocery-ui`, or export `GROCERY_NOTION_CI_LIVE=1` and ensure Cloud secrets are set (no `.env` required).
+5. **Streamlit:** run preflight mapping in the same shell before `just grocery-ui`, or export `NOTION_CI_LIVE=1` and ensure Cloud secrets are set (no `.env` required).
 
 When preflight succeeds: **browser smoke** required — `just grocery-ui` (or `uv run streamlit run src/grocery_hub/ui/app.py`). Exercise **all** page picker tabs; on **Create weekly plan**, open **Continue a saved weekly plan** and confirm the saved-plan list loads without error. Then user spot-check in chat before `gh pr comment` sign-off (unless user delegates full UAT).
 

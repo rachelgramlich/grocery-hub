@@ -56,7 +56,7 @@ NYT_REGI_ID=12345678
 2. Under the title, expand **Sync from NYT Cooking**.
 3. Pick a recipe-box folder (or **All saved recipes**), optionally enable **Dry run**, then click **Sync to Notion** or **Preview sync**.
 
-NYT sync adds **name, link, ingredients** (from the NYT Cooking API, with URL scrape as fallback), **classified metadata**, and the **"Synced from NYT recipe box" checkbox**. Add a **checkbox** column with that exact name in Notion (or set `GROCERY_NYT_SYNCED_COLUMN` if you name it differently). Ingredient lines use the same Notion storage format as **Recipe URL** add.
+NYT sync adds **name, link, ingredients** (from the NYT Cooking API, with URL scrape as fallback), **classified metadata**, and the **"Synced from NYT recipe box" checkbox**. Add a **checkbox** column with that exact name in Notion (or set `NYT_SYNCED_COLUMN` if you name it differently). Ingredient lines use the same Notion storage format as **Recipe URL** add.
 
 **Dry run** previews new recipes and shows how many ingredients would be fetched — it does not write to Notion.
 
@@ -159,7 +159,7 @@ Optional **Recipes** database columns (add manually in Notion; override names vi
 | `Selection count` | Number | +1 when a recipe is added to that week’s saved plan; −1 when removed (min 0). One saved plan row per week. |
 | `Meal plan status` | Select | `Active` (default), `Favorite` (boosted in auto-pick), `Paused` (manual pick only), `Deprecated` (hidden from pickers). Empty in Notion behaves as Active in the app; the column is set to **Active** only when **Selection count** increments on a new saved weekly plan and status was empty. Set **Favorite**, **Paused**, or **Deprecated** yourself in Notion. |
 
-Env overrides: `GROCERY_SUGGESTION_REJECTIONS_COLUMN`, `GROCERY_PLAN_SELECTIONS_COLUMN`, `GROCERY_MEAL_PLAN_STATUS_COLUMN`.
+Env overrides: `SUGGESTION_REJECTIONS_COLUMN`, `PLAN_SELECTIONS_COLUMN`, `MEAL_PLAN_STATUS_COLUMN`.
 
 ## Configuration vs local data
 
@@ -260,4 +260,4 @@ Key columns:
 | Dinner: Weeknight Friendly | checkbox | Meal-planning filter |
 | Synced from NYT recipe box | checkbox | Set automatically by NYT recipe-box sync in the Streamlit app |
 
-Optional env overrides: `GROCERY_NAME_COLUMN`, `GROCERY_LINK_COLUMN`, `GROCERY_INGREDIENTS_COLUMN`.
+Optional env overrides: `NAME_COLUMN`, `LINK_COLUMN`, `INGREDIENTS_COLUMN`.

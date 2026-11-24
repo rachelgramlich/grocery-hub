@@ -34,8 +34,8 @@ flowchart LR
 | --- | --- |
 | `NOTION_*` | Same as `.env.example` |
 | `[auth]` block | Google OIDC (`client_id`, `client_secret`, `redirect_uri`, `cookie_secret`, `server_metadata_url`) |
-| `GROCERY_REQUIRE_AUTH` | `true` |
-| `GROCERY_AUTH_EMAIL_ALLOWLIST` | Comma-separated household Google emails |
+| `REQUIRE_AUTH` | `true` |
+| `AUTH_EMAIL_ALLOWLIST` | Comma-separated household Google emails |
 | `GITHUB_FEEDBACK_REPOSITORY` | `rachelgramlich/grocery-hub` (default if omitted) |
 | `GITHUB_FEEDBACK_TOKEN` | Fine-grained PAT, **issues:write** on this repo only |
 
@@ -103,7 +103,7 @@ If **Send feedback** fails after rotation, check **Manage app → Logs** for con
 
 | Setting | Local (`just grocery-ui`) | Household Cloud |
 | --- | --- | --- |
-| `GROCERY_REQUIRE_AUTH` | `false` in `.streamlit/secrets.toml` | `true` |
+| `REQUIRE_AUTH` | `false` in `.streamlit/secrets.toml` | `true` |
 | Feedback | Always GitHub (`user-feedback-inbox`) | Same |
 | Feedback triage | #355 inbox command or `gh issue list --label user-feedback-inbox` | Same |
 
@@ -152,7 +152,7 @@ List inbox issues: `gh issue list --label user-feedback-inbox --state open --rep
 | Feedback `GITHUB_FEEDBACK_TOKEN` | Missing or revoked token | Update Cloud Secrets; prefer fine-grained PAT (phase 4) |
 | **`ValidationError` after reboot** | Cloud Secrets missing/invalid TOML, or bool/env mismatch | **Manage app → Logs** for field names. Re-paste Secrets (TOML, not `.env` syntax). Need all `NOTION_*`, flat keys + `[auth]`. Save → Reboot. |
 | Notion key missing locally | No `secrets.toml` | Copy `secrets.toml.example` → `secrets.toml`; `just link-secrets` |
-| App auth OK but “not authorized” | Email not on allowlist | `GROCERY_AUTH_EMAIL_ALLOWLIST` in secrets |
+| App auth OK but “not authorized” | Email not on allowlist | `AUTH_EMAIL_ALLOWLIST` in secrets |
 | **My apps** title **“Sign in – Google Accounts”** | SCC profile tile uses **OAuth page title + screenshot**; Settings has **App URL** only (no display-name field) | Expected for **auth-gated** apps. Ignore for household use, or share **`groceryhub.streamlit.app`** directly. Optional: custom subdomain in Settings → General (still won’t fix Google title on the tile). |
 | **My apps** shows error screenshot + sidebar (`app`, `add recipe`, …) | Crash on startup **or** Streamlit treating `pages/` as multipage | Fix **ValidationError** in logs (Secrets TOML). On `main`, UI modules live under `ui/views/` (not `ui/pages/`) so Cloud does not register extra pages. |
 | No README blurb on profile card | SCC card is mostly **name + screenshot**; README summary helps link previews and GitHub | Merge README on `main`, fix Secrets, reboot; optional **public** app for gallery-style listings |

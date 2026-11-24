@@ -263,9 +263,9 @@ def test_find_collection_by_name_case_insensitive(credentials: NytCredentials) -
 
 
 def test_default_orphan_target_folder(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("GROCERY_NYT_ORPHAN_FOLDER", raising=False)
+    monkeypatch.delenv("NYT_ORPHAN_FOLDER", raising=False)
     assert default_orphan_target_folder() == "1 to make"
-    monkeypatch.setenv("GROCERY_NYT_ORPHAN_FOLDER", "Weeknight")
+    monkeypatch.setenv("NYT_ORPHAN_FOLDER", "Weeknight")
     assert default_orphan_target_folder() == "Weeknight"
 
 

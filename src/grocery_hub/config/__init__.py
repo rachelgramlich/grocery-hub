@@ -8,7 +8,7 @@ import re
 import tomllib
 from pathlib import Path
 
-from pydantic import AliasChoices, BaseModel, Field, ValidationError, field_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from src.grocery_hub.paths import REPO_ROOT as _REPO_ROOT
@@ -66,7 +66,7 @@ class Config(BaseSettings):
 
     notion_api_key: str = Field(validation_alias="NOTION_API_KEY")
     notion_recipe_database_id: str = Field(
-        validation_alias=AliasChoices("NOTION_RECIPE_DATABASE_ID", "NOTION_DATABASE_ID"),
+        validation_alias="NOTION_RECIPE_DATABASE_ID",
     )
     notion_pantry_database_id: str = Field(validation_alias="NOTION_PANTRY_DATABASE_ID")
     notion_recurring_weekly_database_id: str = Field(
@@ -76,55 +76,52 @@ class Config(BaseSettings):
         validation_alias="NOTION_WEEKLY_MEAL_PLANS_DATABASE_ID",
     )
     notion_debug_logs_database_id: str = Field(
-        validation_alias=AliasChoices(
-            "NOTION_DEBUG_LOGS_DATABASE_ID",
-            "NOTION_LIST_DEBUG_LOGS_DATABASE_ID",
-        ),
+        validation_alias="NOTION_DEBUG_LOGS_DATABASE_ID",
     )
     default_meals: int = Field(
         default=7,
-        validation_alias="GROCERY_DEFAULT_MEALS",
+        validation_alias="DEFAULT_MEALS",
     )
-    dev_ui_enabled: bool = Field(default=False, validation_alias="GROCERY_DEV_UI")
+    dev_ui_enabled: bool = Field(default=False, validation_alias="DEV_UI")
     notion_data_source_id: str | None = Field(
         default=None,
         validation_alias="NOTION_DATA_SOURCE_ID",
     )
     name_column: str | None = Field(
         default=None,
-        validation_alias="GROCERY_NAME_COLUMN",
+        validation_alias="NAME_COLUMN",
     )
     link_column: str | None = Field(
         default=None,
-        validation_alias="GROCERY_LINK_COLUMN",
+        validation_alias="LINK_COLUMN",
     )
     ingredients_column: str | None = Field(
         default=None,
-        validation_alias="GROCERY_INGREDIENTS_COLUMN",
+        validation_alias="INGREDIENTS_COLUMN",
     )
     instructions_column: str | None = Field(
         default=None,
-        validation_alias="GROCERY_INSTRUCTIONS_COLUMN",
+        validation_alias="INSTRUCTIONS_COLUMN",
     )
     nyt_synced_column: str | None = Field(
         default=None,
-        validation_alias="GROCERY_NYT_SYNCED_COLUMN",
+        validation_alias="NYT_SYNCED_COLUMN",
     )
     suggestion_rejections_column: str | None = Field(
         default=None,
-        validation_alias="GROCERY_SUGGESTION_REJECTIONS_COLUMN",
+        validation_alias="SUGGESTION_REJECTIONS_COLUMN",
     )
     plan_selections_column: str | None = Field(
         default=None,
-        validation_alias="GROCERY_PLAN_SELECTIONS_COLUMN",
+        validation_alias="PLAN_SELECTIONS_COLUMN",
     )
     meal_plan_status_column: str | None = Field(
         default=None,
-        validation_alias="GROCERY_MEAL_PLAN_STATUS_COLUMN",
+        validation_alias="MEAL_PLAN_STATUS_COLUMN",
     )
     recipe_image_column: str | None = Field(
         default=None,
-        validation_alias="GROCERY_RECIPE_IMAGE_COLUMN",
+        validation_alias="RECIPE_IMAGE_COLUMN",
     )
     github_feedback_token: str | None = Field(
         default=None,
@@ -136,11 +133,11 @@ class Config(BaseSettings):
     )
     require_auth: bool = Field(
         default=False,
-        validation_alias="GROCERY_REQUIRE_AUTH",
+        validation_alias="REQUIRE_AUTH",
     )
     auth_email_allowlist: str | None = Field(
         default=None,
-        validation_alias="GROCERY_AUTH_EMAIL_ALLOWLIST",
+        validation_alias="AUTH_EMAIL_ALLOWLIST",
     )
 
     @field_validator("require_auth", "dev_ui_enabled", mode="before")
@@ -227,9 +224,7 @@ class Config(BaseSettings):
     def _require_debug_logs_database_id(cls, value: str | None) -> str:
         if not value:
             raise ValueError(
-                "NOTION_DEBUG_LOGS_DATABASE_ID is required "
-                "(legacy alias NOTION_LIST_DEBUG_LOGS_DATABASE_ID; "
-                "set in .env or Cloud Agent Secrets)",
+                "NOTION_DEBUG_LOGS_DATABASE_ID is required (set in .env or Cloud Agent Secrets)",
             )
         return normalize_notion_database_id(value)
 
@@ -329,7 +324,7 @@ def _format_config_validation_error(exc: ValidationError) -> str:
     detail = "; ".join(parts)
     return (
         "Configuration is invalid. Check repo-root secrets.toml or Streamlit Cloud Secrets "
-        f"(NOTION_*, GITHUB_*, GROCERY_*). Details: {detail}"
+        f"(NOTION_*, GITHUB_*, NYT_*, unprefixed app keys). Details: {detail}"
     )
 
 
@@ -342,8 +337,8 @@ def load_auth_gate_settings() -> AuthGateSettings:
     """Load Google gate flags without validating Notion credentials."""
     _prime_config_environ()
     return AuthGateSettings(
-        require_auth=_coerce_bool_env(os.environ.get("GROCERY_REQUIRE_AUTH", "false")),
-        auth_email_allowlist=os.environ.get("GROCERY_AUTH_EMAIL_ALLOWLIST"),
+        require_auth=_coerce_bool_env(os.environ.get("REQUIRE_AUTH", "false")),
+        auth_email_allowlist=os.environ.get("AUTH_EMAIL_ALLOWLIST"),
     )
 
 
@@ -391,7 +386,7 @@ def load_config() -> Config:
             if "notion_debug_logs_database_id" in loc:
                 raise ValueError(
                     "NOTION_DEBUG_LOGS_DATABASE_ID is required "
-                    "(legacy alias NOTION_LIST_DEBUG_LOGS_DATABASE_ID; "
+                    "("
                     "set in .env or Cloud Agent Secrets)",
                 ) from exc
         raise ValueError(_format_config_validation_error(exc)) from exc
