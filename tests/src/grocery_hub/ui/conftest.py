@@ -7,6 +7,6 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def _auth_gate_env_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
-    """AppTests must not inherit ``GROCERY_REQUIRE_AUTH`` from config tests."""
-    monkeypatch.setenv("GROCERY_REQUIRE_AUTH", "false")
-    monkeypatch.delenv("GROCERY_AUTH_EMAIL_ALLOWLIST", raising=False)
+    """AppTests must not inherit ``REQUIRE_AUTH`` from config tests."""
+    monkeypatch.setenv("REQUIRE_AUTH", "false")
+    monkeypatch.delenv("AUTH_EMAIL_ALLOWLIST", raising=False)

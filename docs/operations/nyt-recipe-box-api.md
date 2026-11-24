@@ -24,7 +24,7 @@ Grocery Hub uses the same JSON endpoints as [cooking.nytimes.com](https://cookin
 
 ## Streamlit
 
-**Add recipe → Sync from NYT Cooking** includes **Recipe box organization**: preview or file saved recipes that are not in any folder into a target folder (default `1 to make`, override with `GROCERY_NYT_ORPHAN_FOLDER`). This updates NYT only — run **Sync to Notion** separately.
+**Add recipe → Sync from NYT Cooking** includes **Recipe box organization**: preview or file saved recipes that are not in any folder into a target folder (default `1 to make`, override with `NYT_ORPHAN_FOLDER`). This updates NYT only — run **Sync to Notion** separately.
 
 Other write helpers remain available for scripts (`scripts/nyt_orphans_to_folder.py`).
 

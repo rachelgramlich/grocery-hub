@@ -38,7 +38,7 @@ def _enter_dev_mode(at) -> None:
 def test_dev_mode_continue_to_grocery_unlocks_grocery_step(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("GROCERY_DEV_UI", "1")
+    monkeypatch.setenv("DEV_UI", "1")
 
     at = apptest_from_app(timeout=120)
     at.run(timeout=120)

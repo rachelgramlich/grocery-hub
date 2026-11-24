@@ -81,6 +81,6 @@ Default **CI** (`just ci`) still uses fake Notion IDs — every PR runs golden w
 
 Use a **separate test Notion workspace** (not production), or parallel **`[GW CI]`** databases with integration access scoped to CI. **GitHub Actions:** `NOTION_CI_API_KEY` (mapped to `NOTION_API_KEY` in the job), optional `NOTION_DATA_SOURCE_ID`, and the four `NOTION_CI_*_DATABASE_ID` secrets (mapped to `NOTION_*_DATABASE_ID`). Step-by-step setup: **[`docs/operations/notion-ci-setup.md`](notion-ci-setup.md)** (GitHub issue **#426**).
 
-**Local live tests:** default pytest loads prod `NOTION_*` from repo-root `.env` for `-k "live and read_only"`. To hit the **CI workspace** instead, keep `NOTION_API_KEY` in `.env`, export the four `NOTION_CI_*_DATABASE_ID` values, and set `GROCERY_NOTION_CI_LIVE=1` (see `tests/notion_test_env.py`). Run `PYTHONPATH=src uv run python -m grocery_hub.integrations.notion_ci_schema` before pytest to catch schema drift early.
+**Local live tests:** default pytest loads prod `NOTION_*` from repo-root `.env` for `-k "live and read_only"`. To hit the **CI workspace** instead, keep `NOTION_API_KEY` in `.env`, export the four `NOTION_CI_*_DATABASE_ID` values, and set `NOTION_CI_LIVE=1` (see `tests/notion_test_env.py`). Run `PYTHONPATH=src uv run python -m grocery_hub.integrations.notion_ci_schema` before pytest to catch schema drift early.
 
 Golden weeks catch **list logic** regressions without secrets; live integration catches **Notion schema / API** drift when secrets are present.
