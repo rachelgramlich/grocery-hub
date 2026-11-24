@@ -240,7 +240,7 @@ def test_holistic_dev_jump_builds_golden_grocery_list(monkeypatch: pytest.Monkey
         lambda: recurring,
     )
 
-    monkeypatch.setenv("GROCERY_HUB_DEV_UI", "1")
+    monkeypatch.setenv("GROCERY_DEV_UI", "1")
 
     at = apptest_from_app(timeout=180)
     at.run(timeout=180)

@@ -13,7 +13,7 @@ PYTEST_NOTION_API_KEY_PLACEHOLDER = "pytest-notion-integration-test-key"
 # Opt in when running live read-only tests against the CI Notion workspace locally.
 # GitHub Actions maps NOTION_CI_API_KEY → NOTION_API_KEY and NOTION_CI_*_DATABASE_ID → NOTION_* in job env.
 # Prod Streamlit never uses NOTION_CI_* names.
-_NOTION_CI_LIVE_ENV = "GROCERY_HUB_NOTION_CI_LIVE"
+_NOTION_CI_LIVE_ENV = "GROCERY_NOTION_CI_LIVE"
 
 # Local / docs: NOTION_CI_* only for test-workspace database IDs (not API key or data source).
 _NOTION_CI_TO_STANDARD: tuple[tuple[str, str], ...] = (
@@ -85,7 +85,7 @@ def apply_notion_ci_env_for_live_tests() -> None:
     GitHub Actions sets ``NOTION_API_KEY`` and database IDs in workflow env (no mapping here).
     Cursor Cloud Agents and local runs: same secret names as Actions — this helper copies
     ``NOTION_CI_API_KEY`` → ``NOTION_API_KEY`` and CI database IDs → ``NOTION_*`` when
-    ``GROCERY_HUB_NOTION_CI_LIVE=1``, or when ``NOTION_API_KEY`` is unset / pytest placeholder.
+    ``GROCERY_NOTION_CI_LIVE=1``, or when ``NOTION_API_KEY`` is unset / pytest placeholder.
     ``NOTION_DEBUG_LOGS_DATABASE_ID`` falls back to weekly meal plans when unset (matches Actions).
     """
     if not _should_use_ci_notion_env():

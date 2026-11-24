@@ -5,7 +5,7 @@ Grocery Hub runs as a **Streamlit** app (`just grocery-ui`) with **Notion** as t
 | Where the app runs | Who can use it |
 | --- | --- |
 | **Local** (`just grocery-ui`, default localhost) | Anyone who can reach the URL — **no in-app login** (typical: only you on the Mac). |
-| **Household deploy** (Streamlit Community Cloud, [#354](https://github.com/rachelgramlich/grocery-hub/issues/354)) | **Google sign-in** + email allowlist (`GROCERY_HUB_REQUIRE_AUTH`, `GROCERY_HUB_AUTH_EMAIL_ALLOWLIST`) — see [household-deploy.md](household-deploy.md) and `access_gate.py`. |
+| **Household deploy** (Streamlit Community Cloud, [#354](https://github.com/rachelgramlich/grocery-hub/issues/354)) | **Google sign-in** + email allowlist (`GROCERY_REQUIRE_AUTH`, `GROCERY_AUTH_EMAIL_ALLOWLIST`) — see [household-deploy.md](household-deploy.md) and `access_gate.py`. |
 
 This document compares ways to use the UI on a phone **outside home Wi‑Fi**, records a **household decision**, and points at remaining backlog work.
 
@@ -81,7 +81,7 @@ Deploy the same app to a PaaS (Railway, Fly.io, Render, a small VPS, etc.) or **
 
 ## Security checklist (any public URL)
 
-- [ ] Gate the URL — for SCC, enable **in-app auth** (`GROCERY_HUB_REQUIRE_AUTH` + allowlist) and keep the Cloud app **Private**; optional alternative is Cloudflare Access in front of a self-hosted URL.
+- [ ] Gate the URL — for SCC, enable **in-app auth** (`GROCERY_REQUIRE_AUTH` + allowlist) and keep the Cloud app **Private**; optional alternative is Cloudflare Access in front of a self-hosted URL.
 - [ ] Keep `.env` / platform secrets out of git; rotate `NOTION_API_KEY` if it was ever leaked.
 - [ ] Notion integration should only have access to the databases you intend.
 - [ ] Optional: NYT cookies in `.env` are sensitive; same rules apply on a hosted machine.

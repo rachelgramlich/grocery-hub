@@ -384,7 +384,7 @@ def render_recipe_maintenance() -> None:
         if not image_column:
             st.info(
                 "Add a Notion **Files** column (for example **Cover image**) and optionally set "
-                "**GROCERY_HUB_RECIPE_IMAGE_COLUMN** in `.env`.",
+                "**GROCERY_RECIPE_IMAGE_COLUMN** in `.env`.",
             )
         else:
             st.caption(

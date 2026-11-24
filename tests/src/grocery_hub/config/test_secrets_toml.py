@@ -32,7 +32,7 @@ GITHUB_FEEDBACK_TOKEN = "gh-test"
     )
     monkeypatch.setenv("NOTION_API_KEY", "from-env")
     for key in list(os.environ):
-        if key.startswith(("GROCERY_HUB_", "GROCERY_WIZARD_", "GITHUB_FEEDBACK_")):
+        if key.startswith(("GROCERY_", "GITHUB_FEEDBACK_")):
             monkeypatch.delenv(key, raising=False)
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(
@@ -84,8 +84,8 @@ def test_load_auth_gate_settings_without_notion_keys(
     secrets_path = tmp_path / "secrets.toml"
     secrets_path.write_text(
         """\
-GROCERY_HUB_REQUIRE_AUTH = true
-GROCERY_HUB_AUTH_EMAIL_ALLOWLIST = "a@example.com"
+GROCERY_REQUIRE_AUTH = true
+GROCERY_AUTH_EMAIL_ALLOWLIST = "a@example.com"
 """,
         encoding="utf-8",
     )
@@ -96,7 +96,7 @@ GROCERY_HUB_AUTH_EMAIL_ALLOWLIST = "a@example.com"
     )
     for key in list(os.environ):
         if key.startswith(
-            ("NOTION_", "GROCERY_HUB_", "GROCERY_WIZARD_", "GITHUB_FEEDBACK_"),
+            ("NOTION_", "GROCERY_", "GITHUB_FEEDBACK_"),
         ):
             monkeypatch.delenv(key, raising=False)
 
@@ -104,7 +104,7 @@ GROCERY_HUB_AUTH_EMAIL_ALLOWLIST = "a@example.com"
     assert gate.require_auth is True
     assert gate.auth_email_allowlist == "a@example.com"
 
-    for key in ("GROCERY_HUB_REQUIRE_AUTH", "GROCERY_HUB_AUTH_EMAIL_ALLOWLIST"):
+    for key in ("GROCERY_REQUIRE_AUTH", "GROCERY_AUTH_EMAIL_ALLOWLIST"):
         monkeypatch.delenv(key, raising=False)
 
 

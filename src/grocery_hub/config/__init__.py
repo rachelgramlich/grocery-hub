@@ -83,65 +83,48 @@ class Config(BaseSettings):
     )
     default_meals: int = Field(
         default=7,
-        validation_alias=AliasChoices("GROCERY_HUB_DEFAULT_MEALS", "GROCERY_WIZARD_DEFAULT_MEALS"),
+        validation_alias="GROCERY_DEFAULT_MEALS",
     )
-    dev_ui_enabled: bool = Field(
-        default=False, validation_alias=AliasChoices("GROCERY_HUB_DEV_UI", "GROCERY_WIZARD_DEV_UI")
-    )
+    dev_ui_enabled: bool = Field(default=False, validation_alias="GROCERY_DEV_UI")
     notion_data_source_id: str | None = Field(
         default=None,
         validation_alias="NOTION_DATA_SOURCE_ID",
     )
     name_column: str | None = Field(
         default=None,
-        validation_alias=AliasChoices("GROCERY_HUB_NAME_COLUMN", "GROCERY_WIZARD_NAME_COLUMN"),
+        validation_alias="GROCERY_NAME_COLUMN",
     )
     link_column: str | None = Field(
         default=None,
-        validation_alias=AliasChoices("GROCERY_HUB_LINK_COLUMN", "GROCERY_WIZARD_LINK_COLUMN"),
+        validation_alias="GROCERY_LINK_COLUMN",
     )
     ingredients_column: str | None = Field(
         default=None,
-        validation_alias=AliasChoices(
-            "GROCERY_HUB_INGREDIENTS_COLUMN", "GROCERY_WIZARD_INGREDIENTS_COLUMN"
-        ),
+        validation_alias="GROCERY_INGREDIENTS_COLUMN",
     )
     instructions_column: str | None = Field(
         default=None,
-        validation_alias=AliasChoices(
-            "GROCERY_HUB_INSTRUCTIONS_COLUMN", "GROCERY_WIZARD_INSTRUCTIONS_COLUMN"
-        ),
+        validation_alias="GROCERY_INSTRUCTIONS_COLUMN",
     )
     nyt_synced_column: str | None = Field(
         default=None,
-        validation_alias=AliasChoices(
-            "GROCERY_HUB_NYT_SYNCED_COLUMN", "GROCERY_WIZARD_NYT_SYNCED_COLUMN"
-        ),
+        validation_alias="GROCERY_NYT_SYNCED_COLUMN",
     )
     suggestion_rejections_column: str | None = Field(
         default=None,
-        validation_alias=AliasChoices(
-            "GROCERY_HUB_SUGGESTION_REJECTIONS_COLUMN",
-            "GROCERY_WIZARD_SUGGESTION_REJECTIONS_COLUMN",
-        ),
+        validation_alias="GROCERY_SUGGESTION_REJECTIONS_COLUMN",
     )
     plan_selections_column: str | None = Field(
         default=None,
-        validation_alias=AliasChoices(
-            "GROCERY_HUB_PLAN_SELECTIONS_COLUMN", "GROCERY_WIZARD_PLAN_SELECTIONS_COLUMN"
-        ),
+        validation_alias="GROCERY_PLAN_SELECTIONS_COLUMN",
     )
     meal_plan_status_column: str | None = Field(
         default=None,
-        validation_alias=AliasChoices(
-            "GROCERY_HUB_MEAL_PLAN_STATUS_COLUMN", "GROCERY_WIZARD_MEAL_PLAN_STATUS_COLUMN"
-        ),
+        validation_alias="GROCERY_MEAL_PLAN_STATUS_COLUMN",
     )
     recipe_image_column: str | None = Field(
         default=None,
-        validation_alias=AliasChoices(
-            "GROCERY_HUB_RECIPE_IMAGE_COLUMN", "GROCERY_WIZARD_RECIPE_IMAGE_COLUMN"
-        ),
+        validation_alias="GROCERY_RECIPE_IMAGE_COLUMN",
     )
     github_feedback_token: str | None = Field(
         default=None,
@@ -153,13 +136,11 @@ class Config(BaseSettings):
     )
     require_auth: bool = Field(
         default=False,
-        validation_alias=AliasChoices("GROCERY_HUB_REQUIRE_AUTH", "GROCERY_WIZARD_REQUIRE_AUTH"),
+        validation_alias="GROCERY_REQUIRE_AUTH",
     )
     auth_email_allowlist: str | None = Field(
         default=None,
-        validation_alias=AliasChoices(
-            "GROCERY_HUB_AUTH_EMAIL_ALLOWLIST", "GROCERY_WIZARD_AUTH_EMAIL_ALLOWLIST"
-        ),
+        validation_alias="GROCERY_AUTH_EMAIL_ALLOWLIST",
     )
 
     @field_validator("require_auth", "dev_ui_enabled", mode="before")
@@ -348,7 +329,7 @@ def _format_config_validation_error(exc: ValidationError) -> str:
     detail = "; ".join(parts)
     return (
         "Configuration is invalid. Check repo-root secrets.toml or Streamlit Cloud Secrets "
-        f"(NOTION_*, GITHUB_*, GROCERY_HUB_*). Details: {detail}"
+        f"(NOTION_*, GITHUB_*, GROCERY_*). Details: {detail}"
     )
 
 
@@ -361,8 +342,8 @@ def load_auth_gate_settings() -> AuthGateSettings:
     """Load Google gate flags without validating Notion credentials."""
     _prime_config_environ()
     return AuthGateSettings(
-        require_auth=_coerce_bool_env(os.environ.get("GROCERY_HUB_REQUIRE_AUTH", "false")),
-        auth_email_allowlist=os.environ.get("GROCERY_HUB_AUTH_EMAIL_ALLOWLIST"),
+        require_auth=_coerce_bool_env(os.environ.get("GROCERY_REQUIRE_AUTH", "false")),
+        auth_email_allowlist=os.environ.get("GROCERY_AUTH_EMAIL_ALLOWLIST"),
     )
 
 

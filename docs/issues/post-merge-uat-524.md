@@ -37,7 +37,7 @@ Mark each row when merged to `main`:
 - [ ] All PRs in the **merge checklist** are on `main`.
 - [ ] `git pull origin main` and note SHA.
 - [ ] `just setup` if deps or `pyproject.toml` changed (#526+).
-- [ ] Record date, machine, and Notion mode: **prod** (`.env`) vs **CI** (`NOTION_CI_*` / `GROCERY_HUB_NOTION_CI_LIVE=1`).
+- [ ] Record date, machine, and Notion mode: **prod** (`.env`) vs **CI** (`NOTION_CI_*` / `GROCERY_NOTION_CI_LIVE=1`).
 
 ### 1. Automated gate (required)
 
@@ -129,7 +129,7 @@ Global: **Refresh**, **Feedback**, loading banner, dropdown dismiss (Tier B + ti
 
 - Live read-only holistic: `uv run pytest tests/src/grocery_hub/ui/test_holistic_ui_smoke_apptest.py -k "live and read_only" -q`
 - NYT sync UI on Add Recipe: block renders (full sync optional)
-- Dev jumps (`GROCERY_HUB_DEV_UI=1`): Dev → Final list / golden path
+- Dev jumps (`GROCERY_DEV_UI=1`): Dev → Final list / golden path
 
 ### 6. Sign-off checklist
 

@@ -30,7 +30,7 @@ def test_warns_when_auth_deploy_missing_feedback_token(
     secrets_path = tmp_path / "secrets.toml"
     secrets_path.write_text(
         """\
-GROCERY_HUB_REQUIRE_AUTH = true
+GROCERY_REQUIRE_AUTH = true
 """,
         encoding="utf-8",
     )
@@ -39,7 +39,7 @@ GROCERY_HUB_REQUIRE_AUTH = true
         "src.grocery_hub.config._secrets_toml_path",
         lambda: secrets_path,
     )
-    for key in ("GITHUB_FEEDBACK_TOKEN", "GROCERY_HUB_REQUIRE_AUTH"):
+    for key in ("GITHUB_FEEDBACK_TOKEN", "GROCERY_REQUIRE_AUTH"):
         monkeypatch.delenv(key, raising=False)
 
     with caplog.at_level(logging.WARNING):
@@ -56,7 +56,7 @@ def test_no_warn_when_token_present(
     secrets_path = tmp_path / "secrets.toml"
     secrets_path.write_text(
         """\
-GROCERY_HUB_REQUIRE_AUTH = true
+GROCERY_REQUIRE_AUTH = true
 GITHUB_FEEDBACK_TOKEN = "github_pat_test"
 """,
         encoding="utf-8",
@@ -66,7 +66,7 @@ GITHUB_FEEDBACK_TOKEN = "github_pat_test"
         "src.grocery_hub.config._secrets_toml_path",
         lambda: secrets_path,
     )
-    monkeypatch.delenv("GROCERY_HUB_REQUIRE_AUTH", raising=False)
+    monkeypatch.delenv("GROCERY_REQUIRE_AUTH", raising=False)
     monkeypatch.delenv("GITHUB_FEEDBACK_TOKEN", raising=False)
 
     with caplog.at_level(logging.WARNING):
@@ -79,9 +79,9 @@ def test_no_warn_for_local_dev_without_auth(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    monkeypatch.delenv("GROCERY_HUB_REQUIRE_AUTH", raising=False)
+    monkeypatch.delenv("GROCERY_REQUIRE_AUTH", raising=False)
     monkeypatch.delenv("GITHUB_FEEDBACK_TOKEN", raising=False)
-    monkeypatch.setenv("GROCERY_HUB_REQUIRE_AUTH", "false")
+    monkeypatch.setenv("GROCERY_REQUIRE_AUTH", "false")
 
     with caplog.at_level(logging.WARNING):
         warn_if_missing_github_feedback_token_when_deployed()

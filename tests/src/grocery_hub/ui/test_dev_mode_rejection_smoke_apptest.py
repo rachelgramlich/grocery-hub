@@ -58,7 +58,7 @@ def test_dev_mode_quick_swap_does_not_increment_rejection_count(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Browser-equivalent smoke via AppTest + live Notion read before/after swap."""
-    monkeypatch.setenv("GROCERY_HUB_DEV_UI", "1")
+    monkeypatch.setenv("GROCERY_DEV_UI", "1")
 
     at = apptest_from_app(timeout=120)
     at.run(timeout=120)
