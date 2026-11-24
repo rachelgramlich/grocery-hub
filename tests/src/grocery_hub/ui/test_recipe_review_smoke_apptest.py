@@ -37,7 +37,7 @@ def _enter_dev_mode(at) -> None:
 
 def test_per_recipe_review_form_submit_reaches_final_list(monkeypatch: pytest.MonkeyPatch) -> None:
     """Live Notion: dev jump → review form → Build final list → grocery result UI."""
-    monkeypatch.setenv("GROCERY_HUB_DEV_UI", "1")
+    monkeypatch.setenv("GROCERY_DEV_UI", "1")
 
     at = apptest_from_app(timeout=120)
     at.run(timeout=120)

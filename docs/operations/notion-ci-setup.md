@@ -2,7 +2,7 @@
 
 GitHub Actions can run **live read-only** pytest against a **CI copy** of your four Grocery Hub Notion databases. Golden weeks and `just smoke-ui` still run on every PR without secrets; this setup is optional and catches Notion schema / API drift.
 
-Household production is **one** Streamlit Community Cloud app ([`docs/operations/household-deploy.md`](household-deploy.md)); experiment on **`[GW CI]`** via local Streamlit (`NOTION_CI_*` / `GROCERY_HUB_NOTION_CI_LIVE`) or GitHub/Cursor CI secrets—not a second Cloud deploy ([#356](https://github.com/rachelgramlich/grocery-hub/issues/356)).
+Household production is **one** Streamlit Community Cloud app ([`docs/operations/household-deploy.md`](household-deploy.md)); experiment on **`[GW CI]`** via local Streamlit (`NOTION_CI_*` / `GROCERY_NOTION_CI_LIVE`) or GitHub/Cursor CI secrets—not a second Cloud deploy ([#356](https://github.com/rachelgramlich/grocery-hub/issues/356)).
 
 Workflow: [`.github/workflows/notion-nightly-readonly.yml`](../.github/workflows/notion-nightly-readonly.yml) (display name *Notion read-only integration*). Runs on **`pull_request`** to **`main`** (same repo, when secrets are set) and **`workflow_dispatch`** — no scheduled cron.
 
@@ -75,7 +75,7 @@ export NOTION_CI_RECIPE_DATABASE_ID='…'
 export NOTION_CI_PANTRY_DATABASE_ID='…'
 export NOTION_CI_RECURRING_WEEKLY_DATABASE_ID='…'
 export NOTION_CI_WEEKLY_MEAL_PLANS_DATABASE_ID='…'
-export GROCERY_HUB_NOTION_CI_LIVE=1
+export GROCERY_NOTION_CI_LIVE=1
 PYTHONPATH=src uv run python -m grocery_hub.integrations.notion_ci_schema
 PYTHONPATH=src uv run pytest -k "live and read_only" -q
 ```

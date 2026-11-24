@@ -31,7 +31,7 @@ class AuditContext:
 
 
 def new_app(ctx: AuditContext) -> AppTest:
-    os.environ.setdefault("GROCERY_HUB_DEV_UI", "1")
+    os.environ.setdefault("GROCERY_DEV_UI", "1")
     return AppTest.from_file(str(APP_PATH), default_timeout=ctx.timeout)
 
 

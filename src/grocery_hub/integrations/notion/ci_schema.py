@@ -91,7 +91,7 @@ def collect_recipes_schema_errors(
     if not schema.ingredients_column:
         errors.append(
             f"{database_label}: missing Ingredients text column. "
-            "Add Ingredients (rich_text) or set GROCERY_HUB_INGREDIENTS_COLUMN.",
+            "Add Ingredients (rich_text) or set GROCERY_INGREDIENTS_COLUMN.",
         )
     elif schema.ingredients_column:
         errors.extend(
