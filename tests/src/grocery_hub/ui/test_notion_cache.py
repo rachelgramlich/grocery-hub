@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
@@ -185,6 +185,26 @@ def test_refresh_reloads_recipes_in_full() -> None:
     invalidate_notion_cache()
     cached_query_recipes(db)
     assert db.query_recipes.call_count == 2
+
+
+def test_hosted_recipe_image_urls_need_refresh_before_expiry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = notion_cache._RecipeStore()
+    store.database_id = "db-1"
+    stale = _recipe("a", "Soup")
+    stale.image_file_url = "https://example.com/old.jpg"
+    stale.image_file_url_expires_at = datetime.now(UTC) + timedelta(minutes=2)
+    store.recipes = {"a": stale}
+    store.synced_at = datetime.now(UTC) - timedelta(minutes=10)
+    monkeypatch.setattr(notion_cache, "_recipe_store", lambda: store)
+
+    db = _stub_db(_recipe("a", "Soup", ingredients="fresh"))
+    db.query_recipes.return_value[0].image_file_url = "https://example.com/new.jpg"
+
+    merged = cached_query_recipes(db)
+    assert db.query_recipes.call_count == 1
+    assert merged[0].image_file_url == "https://example.com/new.jpg"
 
 
 def test_recipe_write_keeps_schema_unless_it_may_change() -> None:

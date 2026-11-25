@@ -26,8 +26,9 @@ from notion_client import Client
 from src.grocery_hub.integrations.notion.data_source import resolve_notion_data_source_id
 from src.grocery_hub.integrations.notion.table import build_notion_rich_text
 from src.grocery_hub.recipes.recipe_images import (
+    read_files_property_download,
     read_files_property_names,
-    read_files_property_url,
+    recipe_has_cover_image,
 )
 
 if TYPE_CHECKING:
@@ -72,6 +73,7 @@ class Recipe:
     properties: dict[str, Any]
     last_edited_time: datetime | None = None
     image_file_url: str | None = None
+    image_file_url_expires_at: datetime | None = None
 
 
 def normalize_recipe_name(name: str) -> str:
@@ -305,7 +307,8 @@ class NotionRecipesDB:
         return None
 
     def query_recipes(self) -> list[Recipe]:
-        return [self._page_to_recipe(page) for page in self._query_recipe_pages()]
+        recipes = [self._page_to_recipe(page) for page in self._query_recipe_pages()]
+        return self._fill_missing_recipe_image_urls(recipes)
 
     def query_recipes_edited_since(self, since: datetime) -> list[Recipe]:
         """Recipes created or edited at or after ``since`` (Notion stamps to the minute)."""
@@ -314,7 +317,23 @@ class NotionRecipesDB:
             "last_edited_time": {"on_or_after": since.astimezone(UTC).isoformat()},
         }
         pages = self._query_recipe_pages(filter=edited_filter)
-        return [self._page_to_recipe(page) for page in pages]
+        recipes = [self._page_to_recipe(page) for page in pages]
+        return self._fill_missing_recipe_image_urls(recipes)
+
+    def _fill_missing_recipe_image_urls(self, recipes: list[Recipe]) -> list[Recipe]:
+        """List queries can omit file download URLs; retrieve those pages for Browse."""
+        schema = self.schema
+        image_column = schema.image_column
+        if not image_column:
+            return recipes
+        filled: list[Recipe] = []
+        for recipe in recipes:
+            if recipe.image_file_url or not recipe_has_cover_image(recipe, schema):
+                filled.append(recipe)
+                continue
+            page = self._client.pages.retrieve(page_id=recipe.page_id)
+            filled.append(self._page_to_recipe(page))
+        return filled
 
     def _recipe_query_filter_properties(self) -> list[str]:
         """Notion property names for list queries — every field ``Recipe`` reads on refresh."""
@@ -583,7 +602,9 @@ class NotionRecipesDB:
         raw_name = _read_property(props.get(schema.name_column))
         name = normalize_recipe_name(str(raw_name)) if raw_name else ""
         image_column = schema.image_column
-        image_url = read_files_property_url(props.get(image_column)) if image_column else None
+        image_download = (
+            read_files_property_download(props.get(image_column)) if image_column else None
+        )
         return Recipe(
             page_id=page["id"],
             name=name,
@@ -595,7 +616,8 @@ class NotionRecipesDB:
             ),
             properties={name: _read_property(prop) for name, prop in props.items()},
             last_edited_time=_parse_notion_timestamp(page.get("last_edited_time")),
-            image_file_url=image_url,
+            image_file_url=image_download.url if image_download else None,
+            image_file_url_expires_at=image_download.expires_at if image_download else None,
         )
 
     def _to_notion_property(self, column_name: str, value: Any) -> dict[str, Any]:

@@ -5,6 +5,7 @@ from __future__ import annotations
 from src.grocery_hub.integrations.notion import DatabaseSchema, Recipe
 from src.grocery_hub.recipes.recipe_images import (
     files_property_has_attachment,
+    read_files_property_download,
     read_files_property_names,
     read_files_property_url,
     recipe_has_cover_image,
@@ -29,13 +30,20 @@ def test_read_files_property_url_prefers_first_file() -> None:
         "files": [
             {
                 "type": "file",
-                "file": {"url": "https://prod-files-secure.s3.us-west-2.amazonaws.com/x.jpg"},
+                "file": {
+                    "url": "https://prod-files-secure.s3.us-west-2.amazonaws.com/x.jpg",
+                    "expiry_time": "2026-11-25T18:00:00.000Z",
+                },
             },
         ],
     }
     assert read_files_property_url(prop) == (
         "https://prod-files-secure.s3.us-west-2.amazonaws.com/x.jpg"
     )
+    download = read_files_property_download(prop)
+    assert download is not None
+    assert download.expires_at is not None
+    assert download.expires_at.year == 2026
 
 
 def test_read_files_property_url_external() -> None:

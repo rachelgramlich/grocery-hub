@@ -2,10 +2,32 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from src.grocery_hub.integrations.notion import DatabaseSchema, Recipe
+
+
+@dataclass(frozen=True, slots=True)
+class NotionFileDownload:
+    """Download URL for a Notion files property entry."""
+
+    url: str
+    expires_at: datetime | None = None
+
+
+def _parse_file_expiry(value: str | None) -> datetime | None:
+    if not value or not isinstance(value, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed
 
 
 def _files_entries(prop: dict[str, Any] | None) -> list[dict[str, Any]]:
@@ -39,7 +61,7 @@ def read_files_property_names(prop: dict[str, Any] | None) -> list[str] | None:
     return names or None
 
 
-def read_files_property_url(prop: dict[str, Any] | None) -> str | None:
+def read_files_property_download(prop: dict[str, Any] | None) -> NotionFileDownload | None:
     """First HTTP(S) URL from a Notion files property when the API exposes one."""
     for entry in _files_entries(prop):
         entry_type = entry.get("type")
@@ -48,20 +70,27 @@ def read_files_property_url(prop: dict[str, Any] | None) -> str | None:
             if isinstance(file_meta, dict):
                 url = file_meta.get("url")
                 if isinstance(url, str) and url.strip():
-                    return url.strip()
+                    expiry = file_meta.get("expiry_time")
+                    expires_at = _parse_file_expiry(expiry) if isinstance(expiry, str) else None
+                    return NotionFileDownload(url=url.strip(), expires_at=expires_at)
         elif entry_type == "external":
             external = entry.get("external")
             if isinstance(external, dict):
                 url = external.get("url")
                 if isinstance(url, str) and url.strip():
-                    return url.strip()
+                    return NotionFileDownload(url=url.strip())
         elif entry_type == "file_upload":
             upload_meta = entry.get("file_upload")
             if isinstance(upload_meta, dict):
                 url = upload_meta.get("url")
                 if isinstance(url, str) and url.strip():
-                    return url.strip()
+                    return NotionFileDownload(url=url.strip())
     return None
+
+
+def read_files_property_url(prop: dict[str, Any] | None) -> str | None:
+    download = read_files_property_download(prop)
+    return download.url if download else None
 
 
 def recipe_has_cover_image(recipe: Recipe, schema: DatabaseSchema) -> bool:

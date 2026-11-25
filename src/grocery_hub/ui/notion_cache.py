@@ -29,6 +29,9 @@ _LAST_RECIPE_LOAD_KEY = "_notion_cache_last_recipe_load_s"
 # Notion stamps ``last_edited_time`` to the minute and clocks differ; re-read a little extra.
 _HOUSEHOLD_CACHE_GENERATION = 0
 _RECIPE_DELTA_OVERLAP = timedelta(minutes=5)
+# Notion-hosted file URLs expire after ~1h; re-list before they 403 in Browse.
+_NOTION_IMAGE_URL_REFRESH_AGE = timedelta(minutes=50)
+_NOTION_IMAGE_URL_EXPIRY_BUFFER = timedelta(minutes=5)
 
 
 @dataclass
@@ -94,6 +97,23 @@ def invalidate_notion_cache() -> None:
     st.cache_data.clear()
 
 
+def _hosted_recipe_image_urls_need_refresh(
+    recipes: dict[str, Recipe],
+    synced_at: datetime | None,
+) -> bool:
+    if synced_at is None:
+        return False
+    now = datetime.now(UTC)
+    if now - synced_at >= _NOTION_IMAGE_URL_REFRESH_AGE:
+        return True
+    threshold = now + _NOTION_IMAGE_URL_EXPIRY_BUFFER
+    for recipe in recipes.values():
+        expires_at = recipe.image_file_url_expires_at
+        if expires_at is not None and expires_at <= threshold:
+            return True
+    return False
+
+
 def last_recipe_cache_load_seconds() -> float | None:
     """Seconds for the most recent cached recipe load (cache miss only)."""
     value = st.session_state.get(_LAST_RECIPE_LOAD_KEY)
@@ -119,6 +139,10 @@ def _recipes_from_store(db: NotionRecipesDB) -> list[Recipe]:
                 store.recipes = {recipe.page_id: recipe for recipe in db.query_recipes()}
             store.synced_at = started
             store.dirty = False
+        elif _hosted_recipe_image_urls_need_refresh(store.recipes, store.synced_at):
+            started = datetime.now(UTC)
+            store.recipes = {recipe.page_id: recipe for recipe in db.query_recipes()}
+            store.synced_at = started
         return list(store.recipes.values())
 
 
